@@ -1,5 +1,5 @@
 import "server-only"
-import { and, eq, gt, isNull, lt, sql } from "drizzle-orm"
+import { and, count, eq, gt, isNull, lt, sql } from "drizzle-orm"
 
 import { getDb } from "@/server/db/client"
 import { loginAttempts, sessions, telegramIdentities, users } from "@/server/db/schema"
@@ -10,6 +10,7 @@ export type NewLoginAttempt = {
   nonce: string
   codeVerifier: string
   returnTo: string
+  ipHash: string | null
   expiresAt: Date
 }
 
@@ -33,6 +34,14 @@ export async function createLoginAttempt(attempt: NewLoginAttempt): Promise<void
   // Opportunistic cleanup keeps the table small without a scheduled job.
   await db.delete(loginAttempts).where(lt(loginAttempts.expiresAt, sql`now() - interval '1 day'`))
   await db.insert(loginAttempts).values(attempt)
+}
+
+export async function countRecentLoginAttempts(ipHash: string, since: Date): Promise<number> {
+  const [row] = await getDb()
+    .select({ count: count() })
+    .from(loginAttempts)
+    .where(and(eq(loginAttempts.ipHash, ipHash), gt(loginAttempts.createdAt, since)))
+  return row?.count ?? 0
 }
 
 /**
@@ -106,7 +115,26 @@ export async function createSession(session: {
   userId: string
   expiresAt: Date
 }): Promise<void> {
-  await getDb().insert(sessions).values(session)
+  const db = getDb()
+  await db.delete(sessions).where(lt(sessions.expiresAt, sql`now()`))
+  await db.insert(sessions).values(session)
+}
+
+export async function countActiveSessions(userId: string): Promise<number> {
+  const [row] = await getDb()
+    .select({ count: count() })
+    .from(sessions)
+    .where(and(eq(sessions.userId, userId), gt(sessions.expiresAt, sql`now()`)))
+  return row?.count ?? 0
+}
+
+export async function deleteUserSessions(userId: string): Promise<void> {
+  await getDb().delete(sessions).where(eq(sessions.userId, userId))
+}
+
+/** Deletes the user; the Telegram identity and sessions go with it (ON DELETE CASCADE). */
+export async function deleteUser(userId: string): Promise<void> {
+  await getDb().delete(users).where(eq(users.id, userId))
 }
 
 export async function findSessionUser(tokenHash: string): Promise<SessionUser | null> {

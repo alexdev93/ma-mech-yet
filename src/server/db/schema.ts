@@ -1,4 +1,4 @@
-import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core"
+import { boolean, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 
@@ -29,26 +29,36 @@ export const telegramIdentities = pgTable("telegram_identities", {
 })
 
 /** Pending authorization requests. Consumed exactly once by the callback. */
-export const loginAttempts = pgTable("login_attempts", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  stateHash: text("state_hash").notNull().unique(),
-  nonce: text("nonce").notNull(),
-  codeVerifier: text("code_verifier").notNull(),
-  returnTo: text("return_to").notNull(),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  consumedAt: timestamp("consumed_at", { withTimezone: true }),
-  /** Result of the callback, e.g. "success" or "missing:phone". A reason code, never data. */
-  outcome: text("outcome"),
-  createdAt: createdAt(),
-})
+export const loginAttempts = pgTable(
+  "login_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    stateHash: text("state_hash").notNull().unique(),
+    nonce: text("nonce").notNull(),
+    codeVerifier: text("code_verifier").notNull(),
+    returnTo: text("return_to").notNull(),
+    /** SHA-256 of the client IP, for rate limiting. The address itself is never stored. */
+    ipHash: text("ip_hash"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    /** Result of the callback, e.g. "success" or "token_exchange_failed". Never data. */
+    outcome: text("outcome"),
+    createdAt: createdAt(),
+  },
+  (table) => [index("login_attempts_ip_hash_created_at_idx").on(table.ipHash, table.createdAt)],
+)
 
 /** Only a hash of the session token is stored. The token itself lives in the cookie. */
-export const sessions = pgTable("sessions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  tokenHash: text("token_hash").notNull().unique(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  createdAt: createdAt(),
-})
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tokenHash: text("token_hash").notNull().unique(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index("sessions_user_id_idx").on(table.userId)],
+)

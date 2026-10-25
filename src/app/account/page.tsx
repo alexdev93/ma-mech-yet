@@ -1,4 +1,4 @@
-import { LogOut } from "lucide-react"
+import { LogOut, RefreshCw, Send, ShieldOff, Trash2 } from "lucide-react"
 import type { Metadata } from "next"
 import Image from "next/image"
 import { redirect } from "next/navigation"
@@ -15,6 +15,9 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { getCurrentUser } from "@/server/auth/session"
+import { getAuthEnv } from "@/server/config/env"
+import type { SessionUser } from "@/server/repositories/auth-repository"
+import { getActiveSessionCount } from "@/server/services/auth-service"
 import { PageHeader } from "@/shared/components/page-header"
 
 export const metadata: Metadata = { title: "Your profile" }
@@ -78,6 +81,25 @@ async function AccountCard() {
     ["Last sign-in", formatDate(user.lastLoginAt)],
   ]
 
+  const botUsername = getAuthEnv().TELEGRAM_BOT_USERNAME
+
+  return (
+    <div className="grid gap-6">
+      <ProfileCard user={user} details={details} botUsername={botUsername} />
+      <SecurityCard userId={user.userId} />
+    </div>
+  )
+}
+
+function ProfileCard({
+  user,
+  details,
+  botUsername,
+}: {
+  user: SessionUser
+  details: ReadonlyArray<readonly [string, ReactNode]>
+  botUsername: string | undefined
+}) {
   return (
     <Card className="max-w-lg">
       <CardHeader className="flex flex-row items-center gap-4">
@@ -111,13 +133,63 @@ async function AccountCard() {
           ))}
         </dl>
       </CardContent>
-      <CardFooter>
+      <CardFooter className="flex flex-wrap gap-2">
+        <Button asChild variant="outline" size="sm">
+          {/* Signing in again refreshes every detail from Telegram. Plain link: never prefetched. */}
+          <a href="/auth/telegram/start?returnTo=/account">
+            <RefreshCw /> Refresh from Telegram
+          </a>
+        </Button>
+        {!user.botAccessGranted && botUsername && (
+          <Button asChild variant="outline" size="sm">
+            <a href={`https://t.me/${botUsername}`} target="_blank" rel="noopener noreferrer">
+              <Send /> Open @{botUsername}
+            </a>
+          </Button>
+        )}
         <form action="/auth/logout" method="post">
           <Button type="submit" variant="outline" size="sm">
             <LogOut /> Log out
           </Button>
         </form>
       </CardFooter>
+    </Card>
+  )
+}
+
+async function SecurityCard({ userId }: { userId: string }) {
+  const activeSessions = await getActiveSessionCount(userId)
+
+  return (
+    <Card className="max-w-lg">
+      <CardHeader>
+        <CardTitle>Security</CardTitle>
+        <CardDescription>
+          You're signed in on {activeSessions} {activeSessions === 1 ? "device" : "devices"}.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4 text-sm">
+        <form action="/auth/logout" method="post">
+          <input type="hidden" name="scope" value="all" />
+          <Button type="submit" variant="outline" size="sm">
+            <ShieldOff /> Sign out everywhere
+          </Button>
+        </form>
+        {/* Two steps without JavaScript: open the disclosure, then confirm. */}
+        <details className="rounded-md border p-3">
+          <summary className="text-destructive cursor-pointer font-medium">Delete account</summary>
+          <p className="text-muted-foreground mt-2">
+            This permanently deletes your profile, Telegram link and sessions. Signing in again
+            later creates a new, empty account.
+          </p>
+          <form action="/auth/delete-account" method="post" className="mt-3">
+            <input type="hidden" name="confirm" value="delete" />
+            <Button type="submit" variant="destructive" size="sm">
+              <Trash2 /> Permanently delete my account
+            </Button>
+          </form>
+        </details>
+      </CardContent>
     </Card>
   )
 }

@@ -1,15 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-import { LOGIN_STATE_COOKIE, loginStateCookieOptions } from "@/server/auth/session"
+import { clientIp, LOGIN_STATE_COOKIE, loginStateCookieOptions } from "@/server/auth/session"
 import { startLogin } from "@/server/services/auth-service"
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const result = await startLogin(request.nextUrl.searchParams.get("returnTo")).catch(
-    (error: unknown) => {
-      console.error("[auth] Could not start login", error)
-      return { ok: false, error: "unavailable" } as const
-    },
-  )
+  const result = await startLogin(
+    request.nextUrl.searchParams.get("returnTo"),
+    clientIp(request),
+  ).catch((error: unknown) => {
+    console.error("[auth] Could not start login", error)
+    return { ok: false, error: "unavailable" } as const
+  })
   if (!result.ok) {
     return NextResponse.redirect(new URL(`/login?error=${result.error}`, request.url), 303)
   }

@@ -27,6 +27,13 @@ const authEnvSchema = z.object({
   TELEGRAM_OIDC_CLIENT_SECRET: text(),
   TELEGRAM_OIDC_REDIRECT_URI: url(),
   TELEGRAM_OIDC_SCOPES: text().default("openid profile"),
+  /** Optional. Enables the "Open the bot" link for users who didn't allow bot messages. */
+  TELEGRAM_BOT_USERNAME: z
+    .string()
+    .trim()
+    .transform((value) => value.replace(/^@/, ""))
+    .pipe(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{4,31}$/))
+    .optional(),
 })
 
 export type AuthEnv = z.infer<typeof authEnvSchema>

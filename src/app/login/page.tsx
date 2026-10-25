@@ -1,4 +1,4 @@
-import { AlertTriangle, Send } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Send } from "lucide-react"
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { Suspense } from "react"
@@ -24,6 +24,7 @@ const ERROR_MESSAGES: Record<LoginError, string> = {
   failed: "We couldn't verify your Telegram login. Please try again.",
   expired:
     "Your login link expired or was opened in a different browser. Please start again from this page.",
+  rate_limited: "Too many sign-in attempts from your network. Please wait a few minutes.",
 }
 
 const STEPS = [
@@ -51,7 +52,7 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
 }
 
 async function LoginCard({ searchParams }: Pick<PageProps<"/login">, "searchParams">) {
-  const [{ error }, user] = await Promise.all([
+  const [{ error, returnTo, deleted }, user] = await Promise.all([
     searchParams,
     // A broken session lookup must not block signing in again.
     getCurrentUser().catch(() => null),
@@ -62,6 +63,11 @@ async function LoginCard({ searchParams }: Pick<PageProps<"/login">, "searchPara
     typeof error === "string" && error in ERROR_MESSAGES
       ? ERROR_MESSAGES[error as LoginError]
       : null
+  // Passed through unvalidated here; startLogin only accepts same-site paths.
+  const startUrl =
+    typeof returnTo === "string"
+      ? `/auth/telegram/start?${new URLSearchParams({ returnTo })}`
+      : "/auth/telegram/start"
 
   return (
     <Card className="max-w-md">
@@ -72,6 +78,12 @@ async function LoginCard({ searchParams }: Pick<PageProps<"/login">, "searchPara
           profile photo and Telegram ID. Sharing your phone number and letting our bot message you
           are optional.
         </CardDescription>
+        {deleted === "1" && (
+          <p role="status" className="flex items-start gap-2 pt-2 text-sm">
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0" /> Your account and all its data were
+            deleted.
+          </p>
+        )}
         {message && (
           <p role="alert" className="text-destructive flex items-start gap-2 pt-2 text-sm">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" /> {message}
@@ -88,7 +100,7 @@ async function LoginCard({ searchParams }: Pick<PageProps<"/login">, "searchPara
       <CardFooter>
         <Button asChild>
           {/* A plain link: the start route has side effects, so it must never be prefetched. */}
-          <a href="/auth/telegram/start">
+          <a href={startUrl}>
             <Send /> Continue with Telegram
           </a>
         </Button>

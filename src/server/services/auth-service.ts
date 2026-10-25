@@ -12,9 +12,13 @@ import {
 import {
   type ConsumedLoginAttempt,
   consumeLoginAttempt,
+  countActiveSessions,
+  countRecentLoginAttempts,
   createLoginAttempt,
   createSession,
   deleteSession,
+  deleteUser,
+  deleteUserSessions,
   findSessionUser,
   recordLoginOutcome,
   type SessionUser,
@@ -25,13 +29,26 @@ import type { Result } from "@/shared/types/result"
 export const LOGIN_ATTEMPT_TTL_MS = 10 * 60 * 1000
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const DEFAULT_RETURN_TO = "/account"
+// Generous for people retrying, tight enough to stop one client flooding login_attempts.
+export const LOGIN_RATE_LIMIT = { max: 20, windowMs: 10 * 60 * 1000 }
 
 /** Error codes shown on the login page. They never reveal which security check failed. */
-export type LoginError = "unavailable" | "denied" | "failed" | "expired"
+export type LoginError = "unavailable" | "denied" | "failed" | "expired" | "rate_limited"
 
 export async function startLogin(
   returnTo?: string | null,
+  clientIp?: string | null,
 ): Promise<Result<{ url: URL; state: string }, LoginError>> {
+  // Hashed so the table never holds IP addresses; a hash is enough to count attempts.
+  const ipHash = clientIp ? sha256(clientIp) : null
+  if (ipHash) {
+    const since = new Date(Date.now() - LOGIN_RATE_LIMIT.windowMs)
+    if ((await countRecentLoginAttempts(ipHash, since)) >= LOGIN_RATE_LIMIT.max) {
+      console.warn("[auth] Login start rate-limited")
+      return { ok: false, error: "rate_limited" }
+    }
+  }
+
   const config = getAuthEnv()
   const provider = await getDiscovery(config)
   if (!provider.ok) return { ok: false, error: "unavailable" }
@@ -44,6 +61,7 @@ export async function startLogin(
     nonce,
     codeVerifier,
     returnTo: safeReturnTo(returnTo),
+    ipHash,
     expiresAt: new Date(Date.now() + LOGIN_ATTEMPT_TTL_MS),
   })
   const url = buildAuthorizationUrl(provider.data.discovery, config, {
@@ -60,6 +78,8 @@ export type CallbackParams = {
   error: string | null
   /** The state stored in this browser's login cookie when the flow started. */
   stateCookie: string | null
+  /** A session this browser already had. Replaced on success so sessions don't pile up. */
+  previousSessionToken?: string | null
 }
 
 export async function completeLogin(
@@ -88,6 +108,11 @@ export async function completeLogin(
   await recordLoginOutcome(stateHash, outcome).catch((cause: unknown) =>
     console.error("[auth] Could not record login outcome", cause),
   )
+  if (result.ok && params.previousSessionToken) {
+    await deleteSession(sha256(params.previousSessionToken)).catch((cause: unknown) =>
+      console.error("[auth] Could not remove the previous session", cause),
+    )
+  }
   return result
 }
 
@@ -151,6 +176,25 @@ export async function getSessionUser(sessionToken: string): Promise<SessionUser 
 
 export async function logout(sessionToken: string): Promise<void> {
   await deleteSession(sha256(sessionToken))
+}
+
+/** Signs the user out on every device, including this one. */
+export async function logoutEverywhere(sessionToken: string): Promise<void> {
+  const user = await findSessionUser(sha256(sessionToken))
+  if (user) await deleteUserSessions(user.userId)
+}
+
+/** Permanently deletes the signed-in user's account and everything linked to it. */
+export async function deleteAccount(sessionToken: string): Promise<boolean> {
+  const user = await findSessionUser(sha256(sessionToken))
+  if (!user) return false
+  await deleteUser(user.userId)
+  console.info("[auth] Account deleted")
+  return true
+}
+
+export async function getActiveSessionCount(userId: string): Promise<number> {
+  return countActiveSessions(userId)
 }
 
 /** Only same-site absolute paths, so the callback can't be turned into an open redirect. */
