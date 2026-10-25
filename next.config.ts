@@ -22,6 +22,9 @@ const contentSecurityPolicy = [
 const securityHeaders = [
   { key: "Content-Security-Policy", value: contentSecurityPolicy },
   { key: "X-Content-Type-Options", value: "nosniff" },
+  // Isolates this window from cross-origin openers. Telegram login uses a full-page redirect,
+  // not Telegram's popup library (which is the only flow this header would break).
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {

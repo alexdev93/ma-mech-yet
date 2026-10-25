@@ -1,16 +1,14 @@
 import "server-only"
 import { cookies } from "next/headers"
+import type { NextRequest } from "next/server"
 
 import type { SessionUser } from "@/server/repositories/auth-repository"
 import { getSessionUser, LOGIN_ATTEMPT_TTL_MS } from "@/server/services/auth-service"
+import { SESSION_COOKIE } from "./cookie-names"
+
+export { LOGIN_STATE_COOKIE, SESSION_COOKIE } from "./cookie-names"
 
 const isProduction = process.env.NODE_ENV === "production"
-
-// __Host- cookies must be Secure with Path=/ and no Domain, which pins them to this exact origin.
-// Browsers reject Secure cookies over plain http, so development drops the prefix.
-const prefix = isProduction ? "__Host-" : ""
-export const SESSION_COOKIE = `${prefix}session`
-export const LOGIN_STATE_COOKIE = `${prefix}tg-login`
 
 // Lax, not Strict: Telegram's redirect back to the callback is a cross-site top-level navigation.
 const baseCookie = { httpOnly: true, secure: isProduction, sameSite: "lax", path: "/" } as const
@@ -23,4 +21,21 @@ export const clearedCookieOptions = { ...baseCookie, maxAge: 0 }
 export async function getCurrentUser(): Promise<SessionUser | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value
   return token ? getSessionUser(token) : null
+}
+
+/**
+ * CSRF check for state-changing POST routes: the request must come from one of our own pages.
+ * SameSite=Lax already keeps the cookie off cross-site POSTs; this also covers older browsers.
+ */
+export function isSameOrigin(request: NextRequest): boolean {
+  return request.headers.get("origin") === request.nextUrl.origin
+}
+
+/** The client address as reported by the hosting proxy (Vercel sets x-real-ip), if any. */
+export function clientIp(request: NextRequest): string | null {
+  return (
+    request.headers.get("x-real-ip") ??
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    null
+  )
 }

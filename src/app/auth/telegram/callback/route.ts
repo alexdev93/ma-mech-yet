@@ -15,6 +15,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     state: query.get("state"),
     error: query.get("error"),
     stateCookie: request.cookies.get(LOGIN_STATE_COOKIE)?.value ?? null,
+    previousSessionToken: request.cookies.get(SESSION_COOKIE)?.value ?? null,
   }).catch((error: unknown) => {
     console.error("[auth] Login callback failed", error)
     return { ok: false, error: "failed" } as const

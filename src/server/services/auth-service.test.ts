@@ -3,7 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { pkceChallenge, sha256 } from "@/server/auth/crypto"
 import * as oidc from "@/server/integrations/telegram-oidc"
 import * as repository from "@/server/repositories/auth-repository"
-import { type CallbackParams, completeLogin, safeReturnTo, startLogin } from "./auth-service"
+import {
+  type CallbackParams,
+  completeLogin,
+  deleteAccount,
+  LOGIN_RATE_LIMIT,
+  logoutEverywhere,
+  safeReturnTo,
+  startLogin,
+} from "./auth-service"
 
 vi.mock("@/server/config/env", () => ({
   getAuthEnv: () => ({
@@ -21,8 +29,12 @@ vi.mock("@/server/repositories/auth-repository", () => ({
   upsertTelegramIdentity: vi.fn(),
   createSession: vi.fn(),
   findSessionUser: vi.fn(),
-  deleteSession: vi.fn(),
+  deleteSession: vi.fn(async () => {}),
   recordLoginOutcome: vi.fn(async () => {}),
+  countRecentLoginAttempts: vi.fn(async () => 0),
+  countActiveSessions: vi.fn(),
+  deleteUserSessions: vi.fn(),
+  deleteUser: vi.fn(),
 }))
 vi.mock("@/server/integrations/telegram-oidc", async (importOriginal) => ({
   ...(await importOriginal<typeof oidc>()),
@@ -208,6 +220,57 @@ describe("completeLogin", () => {
     const first = await completeLogin(callback())
     const second = await completeLogin(callback())
     expect(first.ok && second.ok && first.data.sessionToken !== second.data.sessionToken).toBe(true)
+  })
+
+  it("replaces this browser's previous session, but only when the login succeeds", async () => {
+    await completeLogin(callback({ previousSessionToken: "old-token" }))
+    expect(repository.deleteSession).toHaveBeenCalledWith(sha256("old-token"))
+
+    vi.mocked(repository.deleteSession).mockClear()
+    vi.mocked(oidc.exchangeCode).mockResolvedValueOnce({ ok: false, error: "x" })
+    await completeLogin(callback({ previousSessionToken: "old-token" }))
+    expect(repository.deleteSession).not.toHaveBeenCalled()
+  })
+})
+
+describe("rate limiting", () => {
+  it("stores a hash of the client IP, never the address", async () => {
+    await startLogin(null, "203.0.113.7")
+    const stored = vi.mocked(repository.createLoginAttempt).mock.calls[0]?.[0]
+    expect(stored?.ipHash).toBe(sha256("203.0.113.7"))
+    expect(JSON.stringify(stored)).not.toContain("203.0.113.7")
+  })
+
+  it("refuses to start once the per-IP limit is reached", async () => {
+    vi.mocked(repository.countRecentLoginAttempts).mockResolvedValueOnce(LOGIN_RATE_LIMIT.max)
+    expect(await startLogin(null, "203.0.113.7")).toEqual({ ok: false, error: "rate_limited" })
+    expect(repository.createLoginAttempt).not.toHaveBeenCalled()
+    expect(oidc.getDiscovery).not.toHaveBeenCalled()
+  })
+})
+
+describe("account actions", () => {
+  const sessionUser = { userId: "user-1" } as repository.SessionUser
+
+  it("signs out every session of the token's owner", async () => {
+    vi.mocked(repository.findSessionUser).mockResolvedValueOnce(sessionUser)
+    await logoutEverywhere("token")
+    expect(repository.findSessionUser).toHaveBeenCalledWith(sha256("token"))
+    expect(repository.deleteUserSessions).toHaveBeenCalledWith("user-1")
+  })
+
+  it("deletes only the signed-in user's account", async () => {
+    vi.mocked(repository.findSessionUser).mockResolvedValueOnce(sessionUser)
+    expect(await deleteAccount("token")).toBe(true)
+    expect(repository.deleteUser).toHaveBeenCalledWith("user-1")
+  })
+
+  it("does nothing for an unknown or expired session", async () => {
+    vi.mocked(repository.findSessionUser).mockResolvedValue(null)
+    expect(await deleteAccount("stale")).toBe(false)
+    await logoutEverywhere("stale")
+    expect(repository.deleteUser).not.toHaveBeenCalled()
+    expect(repository.deleteUserSessions).not.toHaveBeenCalled()
   })
 })
 
