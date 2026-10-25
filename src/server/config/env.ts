@@ -15,13 +15,18 @@ export const env = parsed.data
 
 // Auth settings are validated on first use instead of at import, so builds and pages that don't
 // touch auth (and CI, which has no secrets) keep working without them.
+// Values are trimmed first: a pasted trailing newline in a vault entry would otherwise
+// reach Telegram as part of the client credentials.
+const text = () => z.string().trim().min(1)
+const url = () => z.string().trim().pipe(z.url())
+
 const authEnvSchema = z.object({
-  DATABASE_URL: z.url(),
-  TELEGRAM_OIDC_ISSUER: z.url().default("https://oauth.telegram.org"),
-  TELEGRAM_OIDC_CLIENT_ID: z.string().min(1),
-  TELEGRAM_OIDC_CLIENT_SECRET: z.string().min(1),
-  TELEGRAM_OIDC_REDIRECT_URI: z.url(),
-  TELEGRAM_OIDC_SCOPES: z.string().min(1).default("openid profile"),
+  DATABASE_URL: url(),
+  TELEGRAM_OIDC_ISSUER: url().default("https://oauth.telegram.org"),
+  TELEGRAM_OIDC_CLIENT_ID: text(),
+  TELEGRAM_OIDC_CLIENT_SECRET: text(),
+  TELEGRAM_OIDC_REDIRECT_URI: url(),
+  TELEGRAM_OIDC_SCOPES: text().default("openid profile"),
 })
 
 export type AuthEnv = z.infer<typeof authEnvSchema>
