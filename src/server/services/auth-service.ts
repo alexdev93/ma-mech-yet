@@ -26,19 +26,8 @@ export const LOGIN_ATTEMPT_TTL_MS = 10 * 60 * 1000
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const DEFAULT_RETURN_TO = "/account"
 
-/**
- * Error codes shown on the login page. They never reveal which security check failed.
- * "phone" / "bot" / "permissions": the user signed in but withheld the phone number,
- * bot messaging, or both. Saying which one tells them exactly what to allow next time.
- */
-export type LoginError =
-  | "unavailable"
-  | "denied"
-  | "failed"
-  | "expired"
-  | "phone"
-  | "bot"
-  | "permissions"
+/** Error codes shown on the login page. They never reveal which security check failed. */
+export type LoginError = "unavailable" | "denied" | "failed" | "expired"
 
 export async function startLogin(
   returnTo?: string | null,
@@ -136,16 +125,14 @@ async function finishLogin(
   })
   if (!profile.ok) return fail("failed", "id_token_invalid")
 
-  // Both are required. Checked before anything is stored, so a refusal leaves no record.
+  // Phone and bot messaging are requested but optional: declining either still signs the user in.
   // RFC 6749 §5.1: an omitted `scope` means everything requested was granted.
   const { grantedScopes } = token.data
   const botAccessGranted = grantedScopes === null || grantedScopes.includes(BOT_ACCESS_SCOPE)
-  const hasPhone = profile.data.phoneNumber !== null
-  if (!hasPhone || !botAccessGranted) {
-    const missing = [!hasPhone && "phone", !botAccessGranted && "bot_access"].filter(Boolean)
-    const loginError = !hasPhone && !botAccessGranted ? "permissions" : !hasPhone ? "phone" : "bot"
-    return fail(loginError, `missing:${missing.join(",")}`)
-  }
+  const declined = [
+    profile.data.phoneNumber === null && "phone",
+    !botAccessGranted && "bot_access",
+  ].filter(Boolean)
 
   // Every sign-in refreshes the stored profile from Telegram's latest data.
   const userId = await upsertTelegramIdentity(profile.data, botAccessGranted)
@@ -154,7 +141,7 @@ async function finishLogin(
   await createSession({ tokenHash: sha256(sessionToken), userId, expiresAt })
   return {
     result: { ok: true, data: { sessionToken, expiresAt, returnTo: attempt.returnTo } },
-    outcome: "success",
+    outcome: declined.length ? `success:declined:${declined.join(",")}` : "success",
   }
 }
 
