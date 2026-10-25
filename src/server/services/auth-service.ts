@@ -68,14 +68,28 @@ export async function completeLogin(
 ): Promise<Result<{ sessionToken: string; expiresAt: Date; returnTo: string }, LoginError>> {
   const { code, state, error, stateCookie } = params
   // The state must come back to the same browser that started the flow (login CSRF protection).
-  if (!state || !stateCookie || !safeEqual(state, stateCookie))
+  if (!state || !stateCookie || !safeEqual(state, stateCookie)) {
+    console.warn(
+      `[auth] Callback rejected: ${!stateCookie ? "no login cookie (different browser or expired)" : "state mismatch"}`,
+    )
     return { ok: false, error: "expired" }
+  }
 
   // Consume first, so the attempt can't be reused whatever happens next.
   const attempt = await consumeLoginAttempt(sha256(state))
-  if (!attempt) return { ok: false, error: "expired" }
-  if (error) return { ok: false, error: error === "access_denied" ? "denied" : "failed" }
-  if (!code) return { ok: false, error: "failed" }
+  if (!attempt) {
+    console.warn("[auth] Callback rejected: login attempt unknown, expired or already used")
+    return { ok: false, error: "expired" }
+  }
+  if (error) {
+    // `error` is a short OAuth code such as access_denied; never a secret.
+    console.warn(`[auth] Telegram returned error=${error.slice(0, 40)}`)
+    return { ok: false, error: error === "access_denied" ? "denied" : "failed" }
+  }
+  if (!code) {
+    console.warn("[auth] Callback rejected: no authorization code")
+    return { ok: false, error: "failed" }
+  }
 
   const config = getAuthEnv()
   const provider = await getDiscovery(config)
@@ -101,7 +115,11 @@ export async function completeLogin(
   // RFC 6749 §5.1: an omitted `scope` means everything requested was granted.
   const { grantedScopes } = token.data
   const botAccessGranted = grantedScopes === null || grantedScopes.includes(BOT_ACCESS_SCOPE)
-  if (!profile.data.phoneNumber || !botAccessGranted) return { ok: false, error: "permissions" }
+  if (!profile.data.phoneNumber || !botAccessGranted) {
+    const missing = [!profile.data.phoneNumber && "phone", !botAccessGranted && "bot access"]
+    console.warn(`[auth] Login refused, missing: ${missing.filter(Boolean).join(", ")}`)
+    return { ok: false, error: "permissions" }
+  }
 
   const userId = await upsertTelegramIdentity(profile.data, botAccessGranted)
   const sessionToken = randomToken()
