@@ -18,7 +18,10 @@ export function Counter({ initial = 0 }: { initial?: number }) {
       >
         <Minus />
       </Button>
-      <output aria-live="polite" className="min-w-12 text-center text-2xl font-semibold tabular-nums">
+      <output
+        aria-live="polite"
+        className="min-w-12 text-center text-2xl font-semibold tabular-nums"
+      >
         {count}
       </output>
       <Button

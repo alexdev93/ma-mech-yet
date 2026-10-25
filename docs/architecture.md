@@ -6,13 +6,13 @@ This document describes how the code in `src/` is organised and how the boundari
 
 The code is split into five layers by where it may execute.
 
-| Layer | Executes on | Guard |
-| --- | --- | --- |
-| `app/` | Server by default; `"use client"` route files (such as `error.tsx`) run in the browser too | Next.js conventions |
-| `server/` | Server only | `import "server-only"` and ESLint |
-| `client/` | Browser, plus server-side rendering of Client Components | `"use client"` and ESLint |
-| `shared/` | Either | ESLint (no server imports, no browser globals) |
-| `components/ui`, `lib/` | Either | ESLint (no application imports) |
+| Layer                   | Executes on                                                                                | Guard                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| `app/`                  | Server by default; `"use client"` route files (such as `error.tsx`) run in the browser too | Next.js conventions                            |
+| `server/`               | Server only                                                                                | `import "server-only"` and ESLint              |
+| `client/`               | Browser, plus server-side rendering of Client Components                                   | `"use client"` and ESLint                      |
+| `shared/`               | Either                                                                                     | ESLint (no server imports, no browser globals) |
+| `components/ui`, `lib/` | Either                                                                                     | ESLint (no application imports)                |
 
 The directory name is only a convention. The guarantees come from the `server-only` runtime marker and the lint rules below.
 
@@ -34,23 +34,23 @@ The directory name is only a convention. The guarantees come from the `server-on
 
 ## Module responsibilities
 
-| Module | Responsibility |
-| --- | --- |
-| `app/**/page.tsx`, `layout.tsx` | Fetch through services, compose components, set metadata. No business logic |
-| `app/**/actions.ts` | `"use server"` transport: unwrap `FormData`, delegate to a service |
-| `app/api/**/route.ts` | HTTP transport: status codes, headers, typed JSON |
-| `server/config/env.ts` | Parse and validate `process.env` once with Zod; the only place that reads env |
-| `server/integrations/*` | Talk to external systems: timeouts, HTTP errors, payload validation; returns `Result<T>`. No caching |
-| `server/services/*` | Business rules: validation, mapping to view models, orchestration, and caching (`"use cache"`, `cacheLife`, `cacheTag`) |
-| `server/repositories/*` (when added) | Database access only |
-| `client/components/*` | Interactive islands |
-| `client/providers/*` | `AppProviders` composes every client provider (theme, app store, toaster) for the root layout |
-| `client/stores/*` | Zustand stores. `createStoreContext` gives each provider its own store, and `app-store/` is built from slices. See [state-management.md](state-management.md) |
-| `client/services/*` | Browser-side calls to Route Handlers, with response validation |
-| `shared/schemas/*` | Zod schemas, inferred types and pure validation helpers |
-| `shared/types/*` | Cross-layer types without a schema (`Result<T>`) |
-| `shared/components/*` | Presentational components with no hooks and no environment access |
-| `components/ui/*` | shadcn/ui primitives, kept close to upstream |
+| Module                               | Responsibility                                                                                                                                                |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/**/page.tsx`, `layout.tsx`      | Fetch through services, compose components, set metadata. No business logic                                                                                   |
+| `app/**/actions.ts`                  | `"use server"` transport: unwrap `FormData`, delegate to a service                                                                                            |
+| `app/api/**/route.ts`                | HTTP transport: status codes, headers, typed JSON                                                                                                             |
+| `server/config/env.ts`               | Parse and validate `process.env` once with Zod; the only place that reads env                                                                                 |
+| `server/integrations/*`              | Talk to external systems: timeouts, HTTP errors, payload validation; returns `Result<T>`. No caching                                                          |
+| `server/services/*`                  | Business rules: validation, mapping to view models, orchestration, and caching (`"use cache"`, `cacheLife`, `cacheTag`)                                       |
+| `server/repositories/*` (when added) | Database access only                                                                                                                                          |
+| `client/components/*`                | Interactive islands                                                                                                                                           |
+| `client/providers/*`                 | `AppProviders` composes every client provider (theme, app store, toaster) for the root layout                                                                 |
+| `client/stores/*`                    | Zustand stores. `createStoreContext` gives each provider its own store, and `app-store/` is built from slices. See [state-management.md](state-management.md) |
+| `client/services/*`                  | Browser-side calls to Route Handlers, with response validation                                                                                                |
+| `shared/schemas/*`                   | Zod schemas, inferred types and pure validation helpers                                                                                                       |
+| `shared/types/*`                     | Cross-layer types without a schema (`Result<T>`)                                                                                                              |
+| `shared/components/*`                | Presentational components with no hooks and no environment access                                                                                             |
+| `components/ui/*`                    | shadcn/ui primitives, kept close to upstream                                                                                                                  |
 
 ## Request and data flow
 
@@ -92,12 +92,12 @@ HealthStatus (client) → client/services/health-client.fetchHealth()
 
 Vitest runs in a Node environment. `vitest.config.mts` maps `@/` to `src/` and replaces `server-only` with Next's no-op module.
 
-| Test | Covers |
-| --- | --- |
-| `shared/schemas/contact.test.ts` | Valid, invalid and untrusted input to the shared schema |
-| `server/services/contact-service.test.ts` | Server-side validation in the Server Action path |
-| `client/stores/app-store/store.test.ts` | Each slice's actions, store isolation, reset, the notification cap and the persisted subset |
-| `server/services/post-service.test.ts` | Mapping, cache lifetimes, HTTP errors, invalid payloads, network failures and timeouts. `fetch` is stubbed and `next/cache` is mocked |
+| Test                                      | Covers                                                                                                                                |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared/schemas/contact.test.ts`          | Valid, invalid and untrusted input to the shared schema                                                                               |
+| `server/services/contact-service.test.ts` | Server-side validation in the Server Action path                                                                                      |
+| `client/stores/app-store/store.test.ts`   | Each slice's actions, store isolation, reset, the notification cap and the persisted subset                                           |
+| `server/services/post-service.test.ts`    | Mapping, cache lifetimes, HTTP errors, invalid payloads, network failures and timeouts. `fetch` is stubbed and `next/cache` is mocked |
 
 Put a new `*.test.ts` next to the module it covers. Test services and schemas directly, and keep route files thin enough that they don't need their own tests.
 
@@ -133,15 +133,15 @@ Example: an "orders" list with a create form.
 
 ## Enforcing boundaries
 
-| Rule | Tool | Catches |
-| --- | --- | --- |
-| `import "server-only"` | Next.js bundler | Any client bundle that includes a server module, directly or through other imports. Fails the build |
-| `import/no-restricted-paths` | ESLint (`eslint-plugin-import` + TS resolver) | Imports from forbidden layers, by resolved path, so both `@/` aliases and relative paths are covered |
-| `architecture/no-server-in-client` | ESLint (local rule in `eslint.config.mjs`) | A `"use client"` module anywhere, including `app/`, importing `@/server/*` or `server-only` |
-| `no-restricted-globals` | ESLint, `shared/` only | `window`, `document`, `navigator`, `localStorage` and `sessionStorage` |
-| `no-restricted-imports` | ESLint, `shared/` only | `server-only`, `client-only`, `next/headers` and `next/navigation` |
-| `import/no-cycle` | ESLint | Circular dependencies |
-| `noExplicitAny`, a11y, React and Next rules | Biome | General correctness and style |
+| Rule                                        | Tool                                          | Catches                                                                                              |
+| ------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `import "server-only"`                      | Next.js bundler                               | Any client bundle that includes a server module, directly or through other imports. Fails the build  |
+| `import/no-restricted-paths`                | ESLint (`eslint-plugin-import` + TS resolver) | Imports from forbidden layers, by resolved path, so both `@/` aliases and relative paths are covered |
+| `architecture/no-server-in-client`          | ESLint (local rule in `eslint.config.mjs`)    | A `"use client"` module anywhere, including `app/`, importing `@/server/*` or `server-only`          |
+| `no-restricted-globals`                     | ESLint, `shared/` only                        | `window`, `document`, `navigator`, `localStorage` and `sessionStorage`                               |
+| `no-restricted-imports`                     | ESLint, `shared/` only                        | `server-only`, `client-only`, `next/headers` and `next/navigation`                                   |
+| `import/no-cycle`                           | ESLint                                        | Circular dependencies                                                                                |
+| `noExplicitAny`, a11y, React and Next rules | Biome                                         | General correctness and style                                                                        |
 
 Biome does all general linting and formatting. ESLint runs only these architecture rules, which Biome can't express (path zones based on resolved imports, cycle detection, directive-aware checks), so the two tools don't overlap.
 

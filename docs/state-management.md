@@ -4,13 +4,13 @@ Global **client** state uses [Zustand](https://zustand.docs.pmnd.rs) 5. The stor
 
 ## Choosing where state goes
 
-| State | Where it belongs | Example |
-| --- | --- | --- |
-| Data from the server or a database | Server Components and services (`"use cache"`) | posts, orders, user profile |
-| Data that must survive a reload or be shareable | URL search params | filters, pagination, active tab |
-| Local to one component | `useState` / `useActionState` | input value, open dropdown |
-| Shared by unrelated client components | **App store (Zustand)** | toasts, UI preferences, cart, wizard progress |
-| Theme | `next-themes` | light, dark or system |
+| State                                           | Where it belongs                               | Example                                       |
+| ----------------------------------------------- | ---------------------------------------------- | --------------------------------------------- |
+| Data from the server or a database              | Server Components and services (`"use cache"`) | posts, orders, user profile                   |
+| Data that must survive a reload or be shareable | URL search params                              | filters, pagination, active tab               |
+| Local to one component                          | `useState` / `useActionState`                  | input value, open dropdown                    |
+| Shared by unrelated client components           | **App store (Zustand)**                        | toasts, UI preferences, cart, wizard progress |
+| Theme                                           | `next-themes`                                  | light, dark or system                         |
 
 Don't copy server data into the store. Read it on the server and pass it down. The store is for state that only exists in the browser.
 
@@ -43,13 +43,27 @@ A module-level store would be shared by every request the server renders, so one
 
 ```tsx
 "use client"
-import { selectCount, selectCounterActions, useAppStore, useShallow } from "@/client/stores/app-store"
+import {
+  selectCount,
+  selectCounterActions,
+  useAppStore,
+  useShallow,
+} from "@/client/stores/app-store"
 
 export function Example() {
-  const count = useAppStore(selectCount)                                   // one value
-  const { increment } = useAppStore(useShallow(selectCounterActions))     // several values
-  const notify = useAppStore((state) => state.notify)                     // inline selector
-  return <button onClick={() => { increment(); notify({ title: `Count: ${count + 1}` }) }}>+1</button>
+  const count = useAppStore(selectCount) // one value
+  const { increment } = useAppStore(useShallow(selectCounterActions)) // several values
+  const notify = useAppStore((state) => state.notify) // inline selector
+  return (
+    <button
+      onClick={() => {
+        increment()
+        notify({ title: `Count: ${count + 1}` })
+      }}
+    >
+      +1
+    </button>
+  )
 }
 ```
 
@@ -64,9 +78,9 @@ Rules:
 
 ```ts
 const notify = useAppStore(selectNotify)
-notify({ title: "Saved" })                                       // default variant, 4 s
+notify({ title: "Saved" }) // default variant, 4 s
 notify({ title: "Failed", description: "Try again", variant: "error" })
-const id = notify({ title: "Uploading…", duration: 0 })          // stays until dismissed
+const id = notify({ title: "Uploading…", duration: 0 }) // stays until dismissed
 useAppStoreApi().getState().dismiss(id)
 ```
 
@@ -96,7 +110,9 @@ export const createCartSlice: AppSliceCreator<CartSlice> = (set) => ({
         const existing = state.items.find((item) => item.id === id)
         return {
           items: existing
-            ? state.items.map((item) => (item.id === id ? { ...item, quantity: item.quantity + 1 } : item))
+            ? state.items.map((item) =>
+                item.id === id ? { ...item, quantity: item.quantity + 1 } : item,
+              )
             : [...state.items, { id, quantity: 1 }],
         }
       },

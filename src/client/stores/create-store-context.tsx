@@ -1,3 +1,4 @@
+// biome-ignore-all lint/correctness/noComponentHookFactories: the factory runs once at module scope (see app-store/provider.tsx), so Provider and the hooks keep a stable identity.
 "use client"
 
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react"

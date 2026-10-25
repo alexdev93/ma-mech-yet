@@ -53,7 +53,9 @@ export function PreferencesPanel() {
         />
         <Label htmlFor="show-hints">Show hints</Label>
       </div>
-      <ul className={cn("grid rounded-md border text-sm", density === "compact" ? "gap-0" : "gap-1")}>
+      <ul
+        className={cn("grid rounded-md border text-sm", density === "compact" ? "gap-0" : "gap-1")}
+      >
         {ITEMS.map((item) => (
           <li key={item} className={density === "compact" ? "px-3 py-1" : "px-4 py-3"}>
             {item}

@@ -6,20 +6,20 @@ See [docs/architecture.md](docs/architecture.md) for boundaries, data flow and h
 
 ## 1. Technology stack
 
-| Concern | Choice |
-| --- | --- |
-| Framework | Next.js 16 (App Router, Turbopack for dev and build, Cache Components) |
-| UI runtime | React 19.3 with React Compiler (`reactCompiler: true`) |
-| Language | TypeScript 6 with strict settings |
-| Styling | Tailwind CSS v4 via `@tailwindcss/postcss` |
-| Components | shadcn/ui (new-york style, `neutral` base) and Lucide React icons |
-| Theming | `next-themes` (light, dark and system) |
-| Client state | Zustand 5 (slices, per-request store, persistence, DevTools) |
-| Validation | Zod 4 |
-| Testing | Vitest (schemas, services, integrations) |
+| Concern         | Choice                                                                   |
+| --------------- | ------------------------------------------------------------------------ |
+| Framework       | Next.js 16 (App Router, Turbopack for dev and build, Cache Components)   |
+| UI runtime      | React 19.3 with React Compiler (`reactCompiler: true`)                   |
+| Language        | TypeScript 6 with strict settings                                        |
+| Styling         | Tailwind CSS v4 via `@tailwindcss/postcss`                               |
+| Components      | shadcn/ui (new-york style, `neutral` base) and Lucide React icons        |
+| Theming         | `next-themes` (light, dark and system)                                   |
+| Client state    | Zustand 5 (slices, per-request store, persistence, DevTools)             |
+| Validation      | Zod 4                                                                    |
+| Testing         | Vitest (schemas, services, integrations)                                 |
 | Lint and format | Biome (general linting and formatting), ESLint (architecture rules only) |
-| CI | GitHub Actions running `pnpm verify` |
-| Package manager | pnpm |
+| CI              | GitHub Actions running `pnpm verify`                                     |
+| Package manager | pnpm                                                                     |
 
 There is no database, ORM or second component library.
 
@@ -40,10 +40,9 @@ pnpm install
 cp .env.example .env.local
 ```
 
-| Variable | Scope | Default | Purpose |
-| --- | --- | --- | --- |
+| Variable       | Scope       | Default                                | Purpose                                    |
+| -------------- | ----------- | -------------------------------------- | ------------------------------------------ |
 | `DEMO_API_URL` | server only | `https://jsonplaceholder.typicode.com` | Public demo API used by `/examples/server` |
-
 - Server variables are validated at startup in `src/server/config/env.ts`. An invalid value fails fast with a message that names the variable but never prints its value.
 - Secrets are never prefixed with `NEXT_PUBLIC_`. Anything with that prefix is inlined into the browser bundle.
 - `.env.local` and the other `.env*` files are git-ignored. Only `.env.example` is committed.
@@ -51,17 +50,17 @@ cp .env.example .env.local
 
 ## 5. Development commands
 
-| Command | What it does |
-| --- | --- |
-| `pnpm dev` | Dev server with Turbopack (the Next 16 default) |
-| `pnpm check` | Biome lint and format check, then the ESLint architecture rules |
-| `pnpm check:fix` | Applies Biome's safe fixes, formatting and import sorting, then ESLint fixes |
-| `pnpm lint` | Biome lint plus the ESLint architecture rules, without the format check |
-| `pnpm lint:boundaries` | ESLint architecture rules only |
-| `pnpm format` | Biome format with writes |
-| `pnpm typecheck` | `next typegen` (route types) then `tsc --noEmit` |
-| `pnpm test` / `pnpm test:watch` | Vitest, once or in watch mode |
-| `pnpm verify` | `check`, then `typecheck`, then `test`, then `build`. CI runs this on every push and pull request |
+| Command                         | What it does                                                                                      |
+| ------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                      | Dev server with Turbopack (the Next 16 default)                                                   |
+| `pnpm check`                    | Biome lint and format check, then the ESLint architecture rules                                   |
+| `pnpm check:fix`                | Applies Biome's safe fixes, formatting and import sorting, then ESLint fixes                      |
+| `pnpm lint`                     | Biome lint plus the ESLint architecture rules, without the format check                           |
+| `pnpm lint:boundaries`          | ESLint architecture rules only                                                                    |
+| `pnpm format`                   | Biome format with writes                                                                          |
+| `pnpm typecheck`                | `next typegen` (route types) then `tsc --noEmit`                                                  |
+| `pnpm test` / `pnpm test:watch` | Vitest, once or in watch mode                                                                     |
+| `pnpm verify`                   | `check`, then `typecheck`, then `test`, then `build`. CI runs this on every push and pull request |
 
 ## 6. Production build and execution
 
@@ -109,13 +108,13 @@ Tests sit next to the code they cover (`*.test.ts`). `.github/workflows/ci.yml` 
 
 ## 8. Layer responsibilities
 
-| Layer | Contains | May import |
-| --- | --- | --- |
-| `app/` | Thin route files that compose layers | everything |
-| `client/` | Client Components, hooks, providers, browser API clients | `shared`, `components/ui`, `lib` |
-| `server/` | Business logic, data access, integrations, auth, config | `shared`, `lib` |
-| `shared/` | Zod schemas, types, constants, pure utils, hook-free components | `shared`, `components/ui`, `lib` |
-| `components/ui`, `lib` | Application-agnostic primitives | each other |
+| Layer                  | Contains                                                        | May import                       |
+| ---------------------- | --------------------------------------------------------------- | -------------------------------- |
+| `app/`                 | Thin route files that compose layers                            | everything                       |
+| `client/`              | Client Components, hooks, providers, browser API clients        | `shared`, `components/ui`, `lib` |
+| `server/`              | Business logic, data access, integrations, auth, config         | `shared`, `lib`                  |
+| `shared/`              | Zod schemas, types, constants, pure utils, hook-free components | `shared`, `components/ui`, `lib` |
+| `components/ui`, `lib` | Application-agnostic primitives                                 | each other                       |
 
 ESLint enforces these rules (see [section 17](#17-security-rules) and the architecture doc).
 
@@ -129,10 +128,10 @@ To give a Client Component server behaviour, pass it data or a Server Action as 
 
 ## 10. Server Actions or Route Handlers
 
-| Use a **Server Action** when | Use a **Route Handler** when |
-| --- | --- |
-| A form or mutation comes from your own UI | An external client, webhook or mobile app calls an HTTP endpoint |
-| You want progressive enhancement and `useActionState` | You need custom methods, status codes, headers or streaming |
+| Use a **Server Action** when                          | Use a **Route Handler** when                                     |
+| ----------------------------------------------------- | ---------------------------------------------------------------- |
+| A form or mutation comes from your own UI             | An external client, webhook or mobile app calls an HTTP endpoint |
+| You want progressive enhancement and `useActionState` | You need custom methods, status codes, headers or streaming      |
 
 Both are transport layers. Keep them thin and delegate to `server/services`. Server Actions are public HTTP endpoints, so always validate their input and check authorization inside them.
 
@@ -223,18 +222,18 @@ Tailwind v4 is configured CSS-first. There is no `tailwind.config.*`. `postcss.c
 
 ## 18. Troubleshooting
 
-| Symptom | Fix |
-| --- | --- |
+| Symptom                                                                    | Fix                                                                                                                           |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` from pnpm, or from server-side `fetch` | A TLS-inspecting proxy is in the way. Set `NODE_EXTRA_CA_CERTS` to your corporate CA bundle (PEM) before running pnpm or Next |
-| `/examples/server` shows "Could not load posts" | Check `DEMO_API_URL` and network access. The server log has a `[demo-api]` line with the cause |
-| `Invalid server environment variables` at startup | Fix the variable named in the message in `.env.local` or your host settings |
-| `You're importing a module that depends on "server-only"` | Client code imports a server module. Pass data or an action as props instead |
-| `Cannot find module 'class-variance-authority'` (or another package) | Run `pnpm install` |
-| Biome reports formatting differences | Run `pnpm check:fix` |
-| Next warns about multiple lockfiles or the workspace root | `turbopack.root` is pinned in `next.config.ts`. Remove stray lockfiles in parent folders |
-| Build error: uncached data was accessed outside of `<Suspense>` | With Cache Components, move the read into a `"use cache"` function or wrap the component in `<Suspense>` |
-| The browser console reports a CSP violation | Add the blocked origin to the matching directive in `next.config.ts` |
-| `pnpm install --frozen-lockfile` fails in CI | The lockfile is out of date. Run `pnpm install` locally and commit `pnpm-lock.yaml` |
+| `/examples/server` shows "Could not load posts"                            | Check `DEMO_API_URL` and network access. The server log has a `[demo-api]` line with the cause                                |
+| `Invalid server environment variables` at startup                          | Fix the variable named in the message in `.env.local` or your host settings                                                   |
+| `You're importing a module that depends on "server-only"`                  | Client code imports a server module. Pass data or an action as props instead                                                  |
+| `Cannot find module 'class-variance-authority'` (or another package)       | Run `pnpm install`                                                                                                            |
+| Biome reports formatting differences                                       | Run `pnpm check:fix`                                                                                                          |
+| Next warns about multiple lockfiles or the workspace root                  | `turbopack.root` is pinned in `next.config.ts`. Remove stray lockfiles in parent folders                                      |
+| Build error: uncached data was accessed outside of `<Suspense>`            | With Cache Components, move the read into a `"use cache"` function or wrap the component in `<Suspense>`                      |
+| The browser console reports a CSP violation                                | Add the blocked origin to the matching directive in `next.config.ts`                                                          |
+| `pnpm install --frozen-lockfile` fails in CI                               | The lockfile is out of date. Run `pnpm install` locally and commit `pnpm-lock.yaml`                                           |
 
 ## 19. Production deployment checklist
 
