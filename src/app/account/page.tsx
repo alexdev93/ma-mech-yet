@@ -72,11 +72,22 @@ async function AccountCard() {
     ["Profile photo", user.pictureUrl ? "Shared" : "Not shared"],
     [
       "Bot messages",
-      <Badge key="bot" variant={user.botAccessGranted ? "default" : "secondary"}>
-        {user.botAccessGranted ? "Allowed" : "Not allowed"}
-      </Badge>,
+      user.botAccessGranted ? (
+        <Badge key="bot">Allowed</Badge>
+      ) : (
+        // Telegram doesn't report this permission back at login, so we can't tell yet.
+        <span key="bot" className="grid gap-1">
+          <Badge variant="secondary">Not confirmed yet</Badge>
+          <span className="text-muted-foreground text-xs font-normal">
+            If you allowed it in Telegram, our bot can already message you. We'll confirm it the
+            first time the bot gets in touch.
+          </span>
+        </span>
+      ),
     ],
-    ["Allowed since", user.botAccessGrantedAt ? formatDate(user.botAccessGrantedAt) : "—"],
+    ...(user.botAccessGrantedAt
+      ? [["Allowed since", formatDate(user.botAccessGrantedAt)] as const]
+      : []),
     ["Member since", formatDate(user.linkedAt)],
     ["Last sign-in", formatDate(user.lastLoginAt)],
   ]

@@ -151,22 +151,22 @@ async function finishLogin(
   if (!profile.ok) return fail("failed", "id_token_invalid")
 
   // Phone and bot messaging are requested but optional: declining either still signs the user in.
-  // RFC 6749 §5.1: an omitted `scope` means everything requested was granted.
+  // Telegram's `scope` response leaves out telegram:bot_access even when the user granted it
+  // (observed: the bot chat says "You allowed this bot to message you", while `scope` lacked it).
+  // So only an explicit listing confirms access; anything else stays unknown, never "declined".
   const { grantedScopes } = token.data
-  const botAccessGranted = grantedScopes === null || grantedScopes.includes(BOT_ACCESS_SCOPE)
-  const declined = [
-    profile.data.phoneNumber === null && "phone",
-    !botAccessGranted && "bot_access",
-  ].filter(Boolean)
+  const botAccessConfirmed = grantedScopes?.includes(BOT_ACCESS_SCOPE) === true
 
   // Every sign-in refreshes the stored profile from Telegram's latest data.
-  const userId = await upsertTelegramIdentity(profile.data, botAccessGranted)
+  const userId = await upsertTelegramIdentity(profile.data, botAccessConfirmed)
   const sessionToken = randomToken()
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS)
   await createSession({ tokenHash: sha256(sessionToken), userId, expiresAt })
+  // Scope names and a phone yes/no are not personal data, and show what Telegram actually sent.
+  const scopes = grantedScopes === null ? "unlisted" : grantedScopes.join(",")
   return {
     result: { ok: true, data: { sessionToken, expiresAt, returnTo: attempt.returnTo } },
-    outcome: declined.length ? `success:declined:${declined.join(",")}` : "success",
+    outcome: `success;scopes=${scopes};phone=${profile.data.phoneNumber === null ? "no" : "yes"}`,
   }
 }
 

@@ -23,7 +23,8 @@ export type SessionUser = {
   telegramUserId: string | null
   pictureUrl: string | null
   phoneNumber: string | null
-  botAccessGranted: boolean
+  /** true once confirmed, null while unknown (see the schema). */
+  botAccessGranted: boolean | null
   botAccessGrantedAt: Date | null
   linkedAt: Date
   lastLoginAt: Date
@@ -72,10 +73,14 @@ export async function recordLoginOutcome(stateHash: string, outcome: string): Pr
   await getDb().update(loginAttempts).set({ outcome }).where(eq(loginAttempts.stateHash, stateHash))
 }
 
-/** Returns the user for a verified identity, creating both on first login. Safe to repeat. */
+/**
+ * Returns the user for a verified identity, creating both on first login. Safe to repeat.
+ * Profile fields always take Telegram's latest values. Bot access only ever moves to confirmed:
+ * a login that can't tell (null) never overwrites an earlier confirmation.
+ */
 export async function upsertTelegramIdentity(
   profile: TelegramProfile,
-  botAccessGranted: boolean,
+  botAccessConfirmed: boolean,
 ): Promise<string> {
   const fields = {
     telegramUserId: profile.telegramUserId,
@@ -83,16 +88,18 @@ export async function upsertTelegramIdentity(
     username: profile.username,
     pictureUrl: profile.pictureUrl,
     phoneNumber: profile.phoneNumber,
-    botAccessGranted,
-    // Keeps the first grant time across logins, and clears it if access is later withheld.
-    botAccessGrantedAt: botAccessGranted
-      ? sql`coalesce(${telegramIdentities.botAccessGrantedAt}, now())`
-      : null,
   }
   return getDb().transaction(async (tx) => {
     const [existing] = await tx
       .update(telegramIdentities)
-      .set({ ...fields, lastLoginAt: sql`now()` })
+      .set({
+        ...fields,
+        lastLoginAt: sql`now()`,
+        ...(botAccessConfirmed && {
+          botAccessGranted: true,
+          botAccessGrantedAt: sql`coalesce(${telegramIdentities.botAccessGrantedAt}, now())`,
+        }),
+      })
       .where(eq(telegramIdentities.oidcSub, profile.sub))
       .returning({ userId: telegramIdentities.userId })
     if (existing) return existing.userId
@@ -102,7 +109,8 @@ export async function upsertTelegramIdentity(
     // A concurrent first login for the same subject hits the unique constraint and rolls back.
     await tx.insert(telegramIdentities).values({
       ...fields,
-      botAccessGrantedAt: botAccessGranted ? sql`now()` : null,
+      botAccessGranted: botAccessConfirmed ? true : null,
+      botAccessGrantedAt: botAccessConfirmed ? sql`now()` : null,
       userId: user.id,
       oidcSub: profile.sub,
     })
