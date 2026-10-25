@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import type { ReactNode } from "react"
+import { Analytics } from "@vercel/analytics/next"
 
 import { ThemeToggle } from "@/client/components/theme-toggle"
 import { AppProviders } from "@/client/providers/app-providers"
@@ -40,6 +41,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
             <main className="flex flex-col gap-8">{children}</main>
           </div>
         </AppProviders>
+        <Analytics />
       </body>
     </html>
   )
