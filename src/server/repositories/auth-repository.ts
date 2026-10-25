@@ -4,6 +4,7 @@ import { and, count, eq, gt, isNull, lt, sql } from "drizzle-orm"
 import { getDb } from "@/server/db/client"
 import { loginAttempts, sessions, telegramIdentities, users } from "@/server/db/schema"
 import type { TelegramProfile } from "@/server/integrations/telegram-oidc"
+import { applyLatestBotAccessEvent } from "./bot-access-repository"
 
 export type NewLoginAttempt = {
   stateHash: string
@@ -75,8 +76,9 @@ export async function recordLoginOutcome(stateHash: string, outcome: string): Pr
 
 /**
  * Returns the user for a verified identity, creating both on first login. Safe to repeat.
- * Profile fields always take Telegram's latest values. Bot access only ever moves to confirmed:
- * a login that can't tell (null) never overwrites an earlier confirmation.
+ * Profile fields always take Telegram's latest values. Bot access comes from the bot's events
+ * (applied here too, since the grant can arrive before the account exists); a login can only
+ * confirm it, and a login that can't tell never overwrites a recorded state.
  */
 export async function upsertTelegramIdentity(
   profile: TelegramProfile,
@@ -98,23 +100,30 @@ export async function upsertTelegramIdentity(
         ...(botAccessConfirmed && {
           botAccessGranted: true,
           botAccessGrantedAt: sql`coalesce(${telegramIdentities.botAccessGrantedAt}, now())`,
+          botAccessChangedAt: sql`now()`,
         }),
       })
       .where(eq(telegramIdentities.oidcSub, profile.sub))
       .returning({ userId: telegramIdentities.userId })
-    if (existing) return existing.userId
 
-    const [user] = await tx.insert(users).values({}).returning({ id: users.id })
-    if (!user) throw new Error("Failed to create user")
-    // A concurrent first login for the same subject hits the unique constraint and rolls back.
-    await tx.insert(telegramIdentities).values({
-      ...fields,
-      botAccessGranted: botAccessConfirmed ? true : null,
-      botAccessGrantedAt: botAccessConfirmed ? sql`now()` : null,
-      userId: user.id,
-      oidcSub: profile.sub,
-    })
-    return user.id
+    let userId = existing?.userId
+    if (!userId) {
+      const [user] = await tx.insert(users).values({}).returning({ id: users.id })
+      if (!user) throw new Error("Failed to create user")
+      // A concurrent first login for the same subject hits the unique constraint and rolls back.
+      await tx.insert(telegramIdentities).values({
+        ...fields,
+        botAccessGranted: botAccessConfirmed ? true : null,
+        botAccessGrantedAt: botAccessConfirmed ? sql`now()` : null,
+        botAccessChangedAt: botAccessConfirmed ? sql`now()` : null,
+        userId: user.id,
+        oidcSub: profile.sub,
+      })
+      userId = user.id
+    }
+
+    if (profile.telegramUserId) await applyLatestBotAccessEvent(profile.telegramUserId, tx)
+    return userId
   })
 }
 

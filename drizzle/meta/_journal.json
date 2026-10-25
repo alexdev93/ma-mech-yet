@@ -36,6 +36,13 @@
       "when": 1792963954025,
       "tag": "0004_bot_access_unknown_state",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792966269622,
+      "tag": "0005_bot_access_events",
+      "breakpoints": true
     }
   ]
 }

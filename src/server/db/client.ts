@@ -10,7 +10,11 @@ function createDb() {
   return drizzle({ client: new Pool({ connectionString: getAuthEnv().DATABASE_URL }), schema })
 }
 
-let db: ReturnType<typeof createDb> | undefined
+export type Db = ReturnType<typeof createDb>
+/** The database or an open transaction, for queries that must also run inside one. */
+export type Executor = Db | Parameters<Parameters<Db["transaction"]>[0]>[0]
+
+let db: Db | undefined
 
 /** Created on first use so importing this module never requires DATABASE_URL. */
 export function getDb() {

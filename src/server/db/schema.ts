@@ -28,6 +28,8 @@ export const telegramIdentities = pgTable("telegram_identities", {
    * (its chat receives a write_access_allowed service message).
    */
   botAccessGranted: boolean("bot_access_granted"),
+  /** When the bot-access state last changed (event time), so older events never overwrite it. */
+  botAccessChangedAt: timestamp("bot_access_changed_at", { withTimezone: true }),
   botAccessGrantedAt: timestamp("bot_access_granted_at", { withTimezone: true }),
   linkedAt: timestamp("linked_at", { withTimezone: true }).notNull().defaultNow(),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }).notNull().defaultNow(),
@@ -66,4 +68,25 @@ export const sessions = pgTable(
     createdAt: createdAt(),
   },
   (table) => [index("sessions_user_id_idx").on(table.userId)],
+)
+
+/**
+ * Bot-access signals reported by the bot service (contract section 9). Every event is kept, so a
+ * grant that arrives before the account exists is applied when the user signs in.
+ */
+export const botAccessEvents = pgTable(
+  "bot_access_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Idempotency key from the bot service: tg-{botId}-{update_id}. */
+    eventId: text("event_id").notNull().unique(),
+    telegramUserId: text("telegram_user_id").notNull(),
+    status: text("status", { enum: ["granted", "revoked"] }).notNull(),
+    source: text("source").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("bot_access_events_user_occurred_idx").on(table.telegramUserId, table.occurredAt),
+  ],
 )

@@ -70,21 +70,7 @@ async function AccountCard() {
     ["Phone number", user.phoneNumber ?? "Not shared"],
     ["Telegram ID", user.telegramUserId ?? "Not provided"],
     ["Profile photo", user.pictureUrl ? "Shared" : "Not shared"],
-    [
-      "Bot messages",
-      user.botAccessGranted ? (
-        <Badge key="bot">Allowed</Badge>
-      ) : (
-        // Telegram doesn't report this permission back at login, so we can't tell yet.
-        <span key="bot" className="grid gap-1">
-          <Badge variant="secondary">Not confirmed yet</Badge>
-          <span className="text-muted-foreground text-xs font-normal">
-            If you allowed it in Telegram, our bot can already message you. We'll confirm it the
-            first time the bot gets in touch.
-          </span>
-        </span>
-      ),
-    ],
+    ["Bot messages", <BotAccessStatus key="bot" granted={user.botAccessGranted} />],
     ...(user.botAccessGrantedAt
       ? [["Allowed since", formatDate(user.botAccessGrantedAt)] as const]
       : []),
@@ -202,5 +188,26 @@ async function SecurityCard({ userId }: { userId: string }) {
         </details>
       </CardContent>
     </Card>
+  )
+}
+
+// The bot reports allow, block and unblock (see bot-access events); login alone can't tell
+function BotAccessStatus({ granted }: { granted: boolean | null }) {
+  if (granted) return <Badge>Allowed</Badge>
+  const [label, hint] =
+    granted === false
+      ? [
+          "Blocked",
+          "You blocked our bot in Telegram, so it can't message you. Unblock it to get messages again.",
+        ]
+      : [
+          "Not confirmed yet",
+          "Open our bot in Telegram and press Start (or send /start) to let it message you.",
+        ]
+  return (
+    <span className="grid gap-1">
+      <Badge variant={granted === false ? "destructive" : "secondary"}>{label}</Badge>
+      <span className="text-muted-foreground text-xs font-normal">{hint}</span>
+    </span>
   )
 }
