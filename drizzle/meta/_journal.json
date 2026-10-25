@@ -8,6 +8,13 @@
       "when": 1792953718192,
       "tag": "0000_init_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792957960565,
+      "tag": "0001_add_phone_number",
+      "breakpoints": true
     }
   ]
 }

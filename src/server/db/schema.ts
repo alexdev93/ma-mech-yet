@@ -20,6 +20,8 @@ export const telegramIdentities = pgTable("telegram_identities", {
   name: text("name"),
   username: text("username"),
   pictureUrl: text("picture_url"),
+  /** Verified by Telegram (`phone` scope). Personal data: never logged. */
+  phoneNumber: text("phone_number"),
   botAccessGranted: boolean("bot_access_granted").notNull().default(false),
   botAccessGrantedAt: timestamp("bot_access_granted_at", { withTimezone: true }),
   linkedAt: timestamp("linked_at", { withTimezone: true }).notNull().defaultNow(),

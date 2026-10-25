@@ -8,7 +8,8 @@ const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  // https: for Telegram profile photos, whose CDN host isn't documented.
+  "img-src 'self' data: blob: https:",
   "font-src 'self'",
   `connect-src 'self'${isDev ? " ws:" : ""}`,
   "object-src 'none'",

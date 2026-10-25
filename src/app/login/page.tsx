@@ -16,6 +16,8 @@ const ERROR_MESSAGES: Record<LoginError, string> = {
   denied: "You cancelled the Telegram login.",
   failed: "We couldn't verify your Telegram login. Please try again.",
   expired: "Your login link expired or was already used. Please start again.",
+  permissions:
+    "Signing in requires sharing your phone number and allowing our bot to message you. Please try again and allow both.",
 }
 
 export default function LoginPage({ searchParams }: PageProps<"/login">) {
@@ -49,8 +51,9 @@ async function LoginCard({ searchParams }: Pick<PageProps<"/login">, "searchPara
       <CardHeader>
         <CardTitle>Continue with Telegram</CardTitle>
         <CardDescription>
-          You'll confirm the login in Telegram and come back here. We only receive your public
-          profile: name, username and Telegram ID.
+          You'll confirm the login in Telegram and come back here. Telegram will ask you to share
+          your name, username, profile photo, Telegram ID and phone number, and to let our bot
+          message you. All of these are required to sign in.
         </CardDescription>
         {message && (
           <p role="alert" className="text-destructive flex items-center gap-2 pt-2 text-sm">

@@ -42,6 +42,7 @@ const profile: oidc.TelegramProfile = {
   name: "Ada",
   username: "ada",
   pictureUrl: null,
+  phoneNumber: "+251911000000",
 }
 const attempt = { nonce: "nonce", codeVerifier: "verifier", returnTo: "/account" }
 
@@ -58,7 +59,10 @@ beforeEach(() => {
     ok: true,
     data: { discovery, keys: vi.fn(), fetchedAt: Date.now() },
   })
-  vi.mocked(oidc.exchangeCode).mockResolvedValue({ ok: true, data: "id-token" })
+  vi.mocked(oidc.exchangeCode).mockResolvedValue({
+    ok: true,
+    data: { idToken: "id-token", grantedScopes: null },
+  })
   vi.mocked(oidc.verifyIdToken).mockResolvedValue({ ok: true, data: profile })
   vi.mocked(repository.consumeLoginAttempt).mockResolvedValue(attempt)
   vi.mocked(repository.upsertTelegramIdentity).mockResolvedValue("user-1")
@@ -102,10 +106,37 @@ describe("completeLogin", () => {
       audience: "1234567",
       issuer: discovery.issuer,
     })
-    expect(repository.upsertTelegramIdentity).toHaveBeenCalledWith(profile)
+    // No scope list in the token response means everything requested was granted.
+    expect(repository.upsertTelegramIdentity).toHaveBeenCalledWith(profile, true)
     const session = vi.mocked(repository.createSession).mock.calls[0]?.[0]
     expect(session).toMatchObject({ userId: "user-1", tokenHash: sha256(result.data.sessionToken) })
     expect(result.data.returnTo).toBe("/account")
+  })
+
+  it("accepts a granted-scope list that includes bot access", async () => {
+    vi.mocked(oidc.exchangeCode).mockResolvedValue({
+      ok: true,
+      data: {
+        idToken: "id-token",
+        grantedScopes: ["openid", "profile", "phone", "telegram:bot_access"],
+      },
+    })
+    expect((await completeLogin(callback())).ok).toBe(true)
+    expect(repository.upsertTelegramIdentity).toHaveBeenCalledWith(profile, true)
+  })
+
+  it.each([
+    ["the phone number is withheld", { phoneNumber: null }, null],
+    ["bot messaging is declined", {}, ["openid", "profile", "phone"]],
+  ])("refuses the login and stores nothing when %s", async (_label, claims, grantedScopes) => {
+    vi.mocked(oidc.verifyIdToken).mockResolvedValue({ ok: true, data: { ...profile, ...claims } })
+    vi.mocked(oidc.exchangeCode).mockResolvedValue({
+      ok: true,
+      data: { idToken: "id-token", grantedScopes },
+    })
+    expect(await completeLogin(callback())).toEqual({ ok: false, error: "permissions" })
+    expect(repository.upsertTelegramIdentity).not.toHaveBeenCalled()
+    expect(repository.createSession).not.toHaveBeenCalled()
   })
 
   it.each([

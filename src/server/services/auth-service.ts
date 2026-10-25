@@ -3,6 +3,7 @@ import "server-only"
 import { pkceChallenge, randomToken, safeEqual, sha256 } from "@/server/auth/crypto"
 import { getAuthEnv } from "@/server/config/env"
 import {
+  BOT_ACCESS_SCOPE,
   buildAuthorizationUrl,
   exchangeCode,
   getDiscovery,
@@ -23,8 +24,11 @@ export const LOGIN_ATTEMPT_TTL_MS = 10 * 60 * 1000
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const DEFAULT_RETURN_TO = "/account"
 
-/** Error codes shown on the login page. They never reveal which check failed. */
-export type LoginError = "unavailable" | "denied" | "failed" | "expired"
+/**
+ * Error codes shown on the login page. They never reveal which security check failed.
+ * "permissions": the user signed in but withheld the phone number or bot messaging.
+ */
+export type LoginError = "unavailable" | "denied" | "failed" | "expired" | "permissions"
 
 export async function startLogin(
   returnTo?: string | null,
@@ -78,13 +82,13 @@ export async function completeLogin(
   if (!provider.ok) return { ok: false, error: "unavailable" }
   const { discovery, keys } = provider.data
 
-  const idToken = await exchangeCode(discovery, config, {
+  const token = await exchangeCode(discovery, config, {
     code,
     codeVerifier: attempt.codeVerifier,
   })
-  if (!idToken.ok) return { ok: false, error: "failed" }
+  if (!token.ok) return { ok: false, error: "failed" }
 
-  const profile = await verifyIdToken(idToken.data, {
+  const profile = await verifyIdToken(token.data.idToken, {
     keys,
     issuer: discovery.issuer,
     audience: config.TELEGRAM_OIDC_CLIENT_ID,
@@ -93,7 +97,13 @@ export async function completeLogin(
   })
   if (!profile.ok) return { ok: false, error: "failed" }
 
-  const userId = await upsertTelegramIdentity(profile.data)
+  // Both are required. Checked before anything is stored, so a refusal leaves no record.
+  // RFC 6749 §5.1: an omitted `scope` means everything requested was granted.
+  const { grantedScopes } = token.data
+  const botAccessGranted = grantedScopes === null || grantedScopes.includes(BOT_ACCESS_SCOPE)
+  if (!profile.data.phoneNumber || !botAccessGranted) return { ok: false, error: "permissions" }
+
+  const userId = await upsertTelegramIdentity(profile.data, botAccessGranted)
   const sessionToken = randomToken()
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS)
   await createSession({ tokenHash: sha256(sessionToken), userId, expiresAt })

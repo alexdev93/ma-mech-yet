@@ -29,7 +29,20 @@ const discoverySchema = z.object({
 
 export type OidcDiscovery = z.infer<typeof discoverySchema>
 
-const tokenResponseSchema = z.object({ id_token: z.string().min(1) })
+export const BOT_ACCESS_SCOPE = "telegram:bot_access"
+/**
+ * Always requested, on top of TELEGRAM_OIDC_SCOPES. `phone` adds the `phone_number` claim;
+ * `telegram:bot_access` lets the bot message the user but adds no claim to the ID token.
+ */
+export const REQUIRED_SCOPES = ["openid", "profile", "phone", BOT_ACCESS_SCOPE] as const
+
+const tokenResponseSchema = z.object({
+  id_token: z.string().min(1),
+  // RFC 6749: the granted scopes, when they may differ from the requested ones.
+  scope: z.string().optional(),
+})
+
+export type TokenResult = { idToken: string; grantedScopes: string[] | null }
 
 const idTokenClaimsSchema = z.object({
   sub: z.string().min(1),
@@ -37,6 +50,7 @@ const idTokenClaimsSchema = z.object({
   name: z.string().optional(),
   preferred_username: z.string().optional(),
   picture: z.url().optional(),
+  phone_number: z.string().min(1).optional(),
 })
 
 export type TelegramProfile = {
@@ -45,6 +59,11 @@ export type TelegramProfile = {
   name: string | null
   username: string | null
   pictureUrl: string | null
+  phoneNumber: string | null
+}
+
+export function requestedScopes(config: AuthEnv): string {
+  return [...new Set([...REQUIRED_SCOPES, ...config.TELEGRAM_OIDC_SCOPES.split(/\s+/)])].join(" ")
 }
 
 type Discovered = { discovery: OidcDiscovery; keys: JWTVerifyGetKey; fetchedAt: number }
@@ -101,7 +120,7 @@ export function buildAuthorizationUrl(
     response_type: "code",
     client_id: config.TELEGRAM_OIDC_CLIENT_ID,
     redirect_uri: config.TELEGRAM_OIDC_REDIRECT_URI,
-    scope: config.TELEGRAM_OIDC_SCOPES,
+    scope: requestedScopes(config),
     state: params.state,
     nonce: params.nonce,
     code_challenge: params.codeChallenge,
@@ -115,7 +134,7 @@ export async function exchangeCode(
   discovery: OidcDiscovery,
   config: AuthEnv,
   params: { code: string; codeVerifier: string },
-): Promise<Result<string>> {
+): Promise<Result<TokenResult>> {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code: params.code,
@@ -157,7 +176,11 @@ export async function exchangeCode(
       console.error("[telegram-oidc] Token response has no id_token")
       return { ok: false, error: "Telegram login failed." }
     }
-    return { ok: true, data: parsed.data.id_token }
+    const { id_token, scope } = parsed.data
+    return {
+      ok: true,
+      data: { idToken: id_token, grantedScopes: scope === undefined ? null : scope.split(/\s+/) },
+    }
   } catch (error) {
     console.error("[telegram-oidc] Token request failed", error)
     return { ok: false, error: "Telegram login failed." }
@@ -196,7 +219,7 @@ export async function verifyIdToken(
       console.error("[telegram-oidc] Unexpected ID token claims", z.prettifyError(claims.error))
       return { ok: false, error: "Telegram login failed." }
     }
-    const { sub, id, name, preferred_username, picture } = claims.data
+    const { sub, id, name, preferred_username, picture, phone_number } = claims.data
     return {
       ok: true,
       data: {
@@ -205,6 +228,7 @@ export async function verifyIdToken(
         name: name ?? null,
         username: preferred_username ?? null,
         pictureUrl: picture ?? null,
+        phoneNumber: phone_number ?? null,
       },
     }
   } catch (error) {

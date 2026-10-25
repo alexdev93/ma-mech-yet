@@ -21,6 +21,7 @@ export type SessionUser = {
   username: string | null
   telegramUserId: string | null
   pictureUrl: string | null
+  phoneNumber: string | null
   botAccessGranted: boolean
   linkedAt: Date
 }
@@ -56,12 +57,21 @@ export async function consumeLoginAttempt(stateHash: string): Promise<ConsumedLo
 }
 
 /** Returns the user for a verified identity, creating both on first login. Safe to repeat. */
-export async function upsertTelegramIdentity(profile: TelegramProfile): Promise<string> {
+export async function upsertTelegramIdentity(
+  profile: TelegramProfile,
+  botAccessGranted: boolean,
+): Promise<string> {
   const fields = {
     telegramUserId: profile.telegramUserId,
     name: profile.name,
     username: profile.username,
     pictureUrl: profile.pictureUrl,
+    phoneNumber: profile.phoneNumber,
+    botAccessGranted,
+    // Keeps the first grant time across logins, and clears it if access is later withheld.
+    botAccessGrantedAt: botAccessGranted
+      ? sql`coalesce(${telegramIdentities.botAccessGrantedAt}, now())`
+      : null,
   }
   return getDb().transaction(async (tx) => {
     const [existing] = await tx
@@ -74,7 +84,12 @@ export async function upsertTelegramIdentity(profile: TelegramProfile): Promise<
     const [user] = await tx.insert(users).values({}).returning({ id: users.id })
     if (!user) throw new Error("Failed to create user")
     // A concurrent first login for the same subject hits the unique constraint and rolls back.
-    await tx.insert(telegramIdentities).values({ ...fields, userId: user.id, oidcSub: profile.sub })
+    await tx.insert(telegramIdentities).values({
+      ...fields,
+      botAccessGrantedAt: botAccessGranted ? sql`now()` : null,
+      userId: user.id,
+      oidcSub: profile.sub,
+    })
     return user.id
   })
 }
@@ -95,6 +110,7 @@ export async function findSessionUser(tokenHash: string): Promise<SessionUser | 
       username: telegramIdentities.username,
       telegramUserId: telegramIdentities.telegramUserId,
       pictureUrl: telegramIdentities.pictureUrl,
+      phoneNumber: telegramIdentities.phoneNumber,
       botAccessGranted: telegramIdentities.botAccessGranted,
       linkedAt: telegramIdentities.linkedAt,
     })

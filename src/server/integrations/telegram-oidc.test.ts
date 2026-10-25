@@ -7,6 +7,7 @@ import {
   exchangeCode,
   getDiscovery,
   type OidcDiscovery,
+  requestedScopes,
   verifyIdToken,
 } from "./telegram-oidc"
 
@@ -64,7 +65,13 @@ const verify = (token: string, nonce = NONCE) =>
 
 describe("verifyIdToken", () => {
   it("accepts a valid token and maps the profile claims", async () => {
-    const result = await verify(await sign({ preferred_username: "ada" }))
+    const result = await verify(
+      await sign({
+        preferred_username: "ada",
+        picture: "https://t.me/i/userpic/320/ada.jpg",
+        phone_number: "+251911000000",
+      }),
+    )
     expect(result).toEqual({
       ok: true,
       data: {
@@ -72,9 +79,15 @@ describe("verifyIdToken", () => {
         telegramUserId: "987654321",
         name: "Ada",
         username: "ada",
-        pictureUrl: null,
+        pictureUrl: "https://t.me/i/userpic/320/ada.jpg",
+        phoneNumber: "+251911000000",
       },
     })
+  })
+
+  it("maps absent optional claims to null", async () => {
+    const result = await verify(await sign({}))
+    expect(result.ok && [result.data.phoneNumber, result.data.pictureUrl]).toEqual([null, null])
   })
 
   it("rejects a token signed by another key", async () => {
@@ -130,12 +143,18 @@ describe("buildAuthorizationUrl", () => {
       response_type: "code",
       client_id: CLIENT_ID,
       redirect_uri: config.TELEGRAM_OIDC_REDIRECT_URI,
-      scope: "openid profile",
+      scope: "openid profile phone telegram:bot_access",
       state: "s",
       nonce: "n",
       code_challenge: "c",
       code_challenge_method: "S256",
     })
+  })
+
+  it("always requests the required scopes, without duplicates", () => {
+    expect(requestedScopes({ ...config, TELEGRAM_OIDC_SCOPES: "openid extra" })).toBe(
+      "openid profile phone telegram:bot_access extra",
+    )
   })
 })
 
@@ -154,7 +173,10 @@ describe("exchangeCode", () => {
   it("uses client_secret_basic by default and returns the id_token", async () => {
     const fetchMock = mockFetch(Response.json({ id_token: "token", access_token: "ignored" }))
 
-    expect(await exchangeCode(discovery, config, params)).toEqual({ ok: true, data: "token" })
+    expect(await exchangeCode(discovery, config, params)).toEqual({
+      ok: true,
+      data: { idToken: "token", grantedScopes: null },
+    })
     const init = fetchMock.mock.calls[0]?.[1]
     const headers = init?.headers as Record<string, string>
     expect(headers.Authorization).toBe(
@@ -163,6 +185,12 @@ describe("exchangeCode", () => {
     const body = init?.body as URLSearchParams
     expect(body.get("code_verifier")).toBe("verifier")
     expect(body.has("client_secret")).toBe(false)
+  })
+
+  it("returns the granted scopes when the token response lists them", async () => {
+    mockFetch(Response.json({ id_token: "token", scope: "openid profile phone" }))
+    const result = await exchangeCode(discovery, config, params)
+    expect(result.ok && result.data.grantedScopes).toEqual(["openid", "profile", "phone"])
   })
 
   it("sends credentials in the body when only client_secret_post is advertised", async () => {
