@@ -22,6 +22,7 @@ vi.mock("@/server/repositories/auth-repository", () => ({
   createSession: vi.fn(),
   findSessionUser: vi.fn(),
   deleteSession: vi.fn(),
+  recordLoginOutcome: vi.fn(async () => {}),
 }))
 vi.mock("@/server/integrations/telegram-oidc", async (importOriginal) => ({
   ...(await importOriginal<typeof oidc>()),
@@ -126,17 +127,43 @@ describe("completeLogin", () => {
   })
 
   it.each([
-    ["the phone number is withheld", { phoneNumber: null }, null],
-    ["bot messaging is declined", {}, ["openid", "profile", "phone"]],
-  ])("refuses the login and stores nothing when %s", async (_label, claims, grantedScopes) => {
-    vi.mocked(oidc.verifyIdToken).mockResolvedValue({ ok: true, data: { ...profile, ...claims } })
-    vi.mocked(oidc.exchangeCode).mockResolvedValue({
-      ok: true,
-      data: { idToken: "id-token", grantedScopes },
-    })
-    expect(await completeLogin(callback())).toEqual({ ok: false, error: "permissions" })
-    expect(repository.upsertTelegramIdentity).not.toHaveBeenCalled()
-    expect(repository.createSession).not.toHaveBeenCalled()
+    ["the phone number is withheld", { phoneNumber: null }, null, "phone", "missing:phone"],
+    ["bot messaging is declined", {}, ["openid", "profile", "phone"], "bot", "missing:bot_access"],
+    [
+      "both are withheld",
+      { phoneNumber: null },
+      ["openid", "profile"],
+      "permissions",
+      "missing:phone,bot_access",
+    ],
+  ])(
+    "refuses the login and stores nothing when %s",
+    async (_label, claims, grantedScopes, loginError, outcome) => {
+      vi.mocked(oidc.verifyIdToken).mockResolvedValue({ ok: true, data: { ...profile, ...claims } })
+      vi.mocked(oidc.exchangeCode).mockResolvedValue({
+        ok: true,
+        data: { idToken: "id-token", grantedScopes },
+      })
+      expect(await completeLogin(callback())).toEqual({ ok: false, error: loginError })
+      expect(repository.upsertTelegramIdentity).not.toHaveBeenCalled()
+      expect(repository.createSession).not.toHaveBeenCalled()
+      expect(repository.recordLoginOutcome).toHaveBeenCalledWith(sha256("state-value"), outcome)
+    },
+  )
+
+  it("records success, and a recording failure doesn't break the login", async () => {
+    vi.mocked(repository.recordLoginOutcome).mockRejectedValueOnce(new Error("db down"))
+    expect((await completeLogin(callback())).ok).toBe(true)
+    expect(repository.recordLoginOutcome).toHaveBeenCalledWith(sha256("state-value"), "success")
+  })
+
+  it("records why a token step failed", async () => {
+    vi.mocked(oidc.exchangeCode).mockResolvedValueOnce({ ok: false, error: "x" })
+    await completeLogin(callback())
+    expect(repository.recordLoginOutcome).toHaveBeenLastCalledWith(
+      sha256("state-value"),
+      "token_exchange_failed",
+    )
   })
 
   it.each([

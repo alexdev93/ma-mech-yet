@@ -10,11 +10,13 @@ import {
   verifyIdToken,
 } from "@/server/integrations/telegram-oidc"
 import {
+  type ConsumedLoginAttempt,
   consumeLoginAttempt,
   createLoginAttempt,
   createSession,
   deleteSession,
   findSessionUser,
+  recordLoginOutcome,
   type SessionUser,
   upsertTelegramIdentity,
 } from "@/server/repositories/auth-repository"
@@ -26,9 +28,17 @@ const DEFAULT_RETURN_TO = "/account"
 
 /**
  * Error codes shown on the login page. They never reveal which security check failed.
- * "permissions": the user signed in but withheld the phone number or bot messaging.
+ * "phone" / "bot" / "permissions": the user signed in but withheld the phone number,
+ * bot messaging, or both. Saying which one tells them exactly what to allow next time.
  */
-export type LoginError = "unavailable" | "denied" | "failed" | "expired" | "permissions"
+export type LoginError =
+  | "unavailable"
+  | "denied"
+  | "failed"
+  | "expired"
+  | "phone"
+  | "bot"
+  | "permissions"
 
 export async function startLogin(
   returnTo?: string | null,
@@ -76,31 +86,46 @@ export async function completeLogin(
   }
 
   // Consume first, so the attempt can't be reused whatever happens next.
-  const attempt = await consumeLoginAttempt(sha256(state))
+  const stateHash = sha256(state)
+  const attempt = await consumeLoginAttempt(stateHash)
   if (!attempt) {
     console.warn("[auth] Callback rejected: login attempt unknown, expired or already used")
     return { ok: false, error: "expired" }
   }
+
+  const { result, outcome } = await finishLogin(attempt, code, error)
+  if (!result.ok) console.warn(`[auth] Login failed: ${outcome}`)
+  // Best effort: failing to record the outcome must not change the login result.
+  await recordLoginOutcome(stateHash, outcome).catch((cause: unknown) =>
+    console.error("[auth] Could not record login outcome", cause),
+  )
+  return result
+}
+
+type LoginResult = Result<{ sessionToken: string; expiresAt: Date; returnTo: string }, LoginError>
+
+async function finishLogin(
+  attempt: ConsumedLoginAttempt,
+  code: string | null,
+  error: string | null,
+): Promise<{ result: LoginResult; outcome: string }> {
+  const fail = (loginError: LoginError, outcome: string) => ({
+    result: { ok: false, error: loginError } as const,
+    outcome,
+  })
+  // `error` is a short OAuth code such as access_denied; never a secret.
   if (error) {
-    // `error` is a short OAuth code such as access_denied; never a secret.
-    console.warn(`[auth] Telegram returned error=${error.slice(0, 40)}`)
-    return { ok: false, error: error === "access_denied" ? "denied" : "failed" }
+    return fail(error === "access_denied" ? "denied" : "failed", `telegram:${error.slice(0, 40)}`)
   }
-  if (!code) {
-    console.warn("[auth] Callback rejected: no authorization code")
-    return { ok: false, error: "failed" }
-  }
+  if (!code) return fail("failed", "no_code")
 
   const config = getAuthEnv()
   const provider = await getDiscovery(config)
-  if (!provider.ok) return { ok: false, error: "unavailable" }
+  if (!provider.ok) return fail("unavailable", "discovery_unavailable")
   const { discovery, keys } = provider.data
 
-  const token = await exchangeCode(discovery, config, {
-    code,
-    codeVerifier: attempt.codeVerifier,
-  })
-  if (!token.ok) return { ok: false, error: "failed" }
+  const token = await exchangeCode(discovery, config, { code, codeVerifier: attempt.codeVerifier })
+  if (!token.ok) return fail("failed", "token_exchange_failed")
 
   const profile = await verifyIdToken(token.data.idToken, {
     keys,
@@ -109,23 +134,28 @@ export async function completeLogin(
     nonce: attempt.nonce,
     algorithms: discovery.id_token_signing_alg_values_supported,
   })
-  if (!profile.ok) return { ok: false, error: "failed" }
+  if (!profile.ok) return fail("failed", "id_token_invalid")
 
   // Both are required. Checked before anything is stored, so a refusal leaves no record.
   // RFC 6749 §5.1: an omitted `scope` means everything requested was granted.
   const { grantedScopes } = token.data
   const botAccessGranted = grantedScopes === null || grantedScopes.includes(BOT_ACCESS_SCOPE)
-  if (!profile.data.phoneNumber || !botAccessGranted) {
-    const missing = [!profile.data.phoneNumber && "phone", !botAccessGranted && "bot access"]
-    console.warn(`[auth] Login refused, missing: ${missing.filter(Boolean).join(", ")}`)
-    return { ok: false, error: "permissions" }
+  const hasPhone = profile.data.phoneNumber !== null
+  if (!hasPhone || !botAccessGranted) {
+    const missing = [!hasPhone && "phone", !botAccessGranted && "bot_access"].filter(Boolean)
+    const loginError = !hasPhone && !botAccessGranted ? "permissions" : !hasPhone ? "phone" : "bot"
+    return fail(loginError, `missing:${missing.join(",")}`)
   }
 
+  // Every sign-in refreshes the stored profile from Telegram's latest data.
   const userId = await upsertTelegramIdentity(profile.data, botAccessGranted)
   const sessionToken = randomToken()
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS)
   await createSession({ tokenHash: sha256(sessionToken), userId, expiresAt })
-  return { ok: true, data: { sessionToken, expiresAt, returnTo: attempt.returnTo } }
+  return {
+    result: { ok: true, data: { sessionToken, expiresAt, returnTo: attempt.returnTo } },
+    outcome: "success",
+  }
 }
 
 export async function getSessionUser(sessionToken: string): Promise<SessionUser | null> {

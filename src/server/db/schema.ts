@@ -37,6 +37,8 @@ export const loginAttempts = pgTable("login_attempts", {
   returnTo: text("return_to").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  /** Result of the callback, e.g. "success" or "missing:phone". A reason code, never data. */
+  outcome: text("outcome"),
   createdAt: createdAt(),
 })
 

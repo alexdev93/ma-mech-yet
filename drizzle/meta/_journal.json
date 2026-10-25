@@ -15,6 +15,13 @@
       "when": 1792957960565,
       "tag": "0001_add_phone_number",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792960577539,
+      "tag": "0002_add_login_outcome",
+      "breakpoints": true
     }
   ]
 }
