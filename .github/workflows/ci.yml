@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Reused by auto-pr.yml, which runs it on every push to other branches before merging.
+  workflow_call:
+    secrets:
+      ENV_VAULT_TOKEN:
+        required: false
 
 concurrency:
   group: ci-${{ github.ref }}
