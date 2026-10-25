@@ -1,5 +1,6 @@
 import { LogOut } from "lucide-react"
 import type { Metadata } from "next"
+import Image from "next/image"
 import { redirect } from "next/navigation"
 import { Suspense } from "react"
 
@@ -39,15 +40,29 @@ async function AccountCard() {
 
   const details = [
     ["Username", user.username ? `@${user.username}` : "Not set"],
+    ["Phone", user.phoneNumber ?? "Not shared"],
     ["Telegram ID", user.telegramUserId ?? "Not provided"],
     ["Linked", `${dateFormat.format(user.linkedAt)} (UTC)`],
   ] as const
 
   return (
     <Card className="max-w-md">
-      <CardHeader>
-        <CardTitle>{user.name ?? "Telegram user"}</CardTitle>
-        <CardDescription>Signed in with Telegram.</CardDescription>
+      <CardHeader className="flex flex-row items-center gap-4">
+        {user.pictureUrl && (
+          // Telegram serves the photo; unoptimized avoids proxying it through our server.
+          <Image
+            src={user.pictureUrl}
+            alt=""
+            width={56}
+            height={56}
+            unoptimized
+            className="size-14 rounded-full object-cover"
+          />
+        )}
+        <div className="grid gap-1.5">
+          <CardTitle>{user.name ?? "Telegram user"}</CardTitle>
+          <CardDescription>Signed in with Telegram.</CardDescription>
+        </div>
       </CardHeader>
       <CardContent className="grid gap-3 text-sm">
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">

@@ -1,0 +1,1 @@
+ALTER TABLE "telegram_identities" ADD COLUMN "phone_number" text;
