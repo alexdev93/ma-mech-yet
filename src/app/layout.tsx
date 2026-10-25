@@ -1,7 +1,7 @@
+import { Analytics } from "@vercel/analytics/next"
 import type { Metadata } from "next"
 import Link from "next/link"
 import type { ReactNode } from "react"
-import { Analytics } from "@vercel/analytics/next"
 
 import { ThemeToggle } from "@/client/components/theme-toggle"
 import { AppProviders } from "@/client/providers/app-providers"
