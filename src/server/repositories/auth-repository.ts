@@ -23,7 +23,9 @@ export type SessionUser = {
   pictureUrl: string | null
   phoneNumber: string | null
   botAccessGranted: boolean
+  botAccessGrantedAt: Date | null
   linkedAt: Date
+  lastLoginAt: Date
 }
 
 export async function createLoginAttempt(attempt: NewLoginAttempt): Promise<void> {
@@ -112,7 +114,9 @@ export async function findSessionUser(tokenHash: string): Promise<SessionUser | 
       pictureUrl: telegramIdentities.pictureUrl,
       phoneNumber: telegramIdentities.phoneNumber,
       botAccessGranted: telegramIdentities.botAccessGranted,
+      botAccessGrantedAt: telegramIdentities.botAccessGrantedAt,
       linkedAt: telegramIdentities.linkedAt,
+      lastLoginAt: telegramIdentities.lastLoginAt,
     })
     .from(sessions)
     .innerJoin(telegramIdentities, eq(telegramIdentities.userId, sessions.userId))

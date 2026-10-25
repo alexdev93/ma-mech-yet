@@ -54,7 +54,7 @@ function sign(claims: JWTPayload, options: { key?: KeyPair; expiresIn?: string |
     .setProtectedHeader({ alg: "RS256", kid: "k1" })
     .setIssuer(claims.iss ?? ISSUER)
     .setAudience(claims.aud ?? CLIENT_ID)
-    .setSubject("opaque-sub")
+    .setSubject(claims.sub ?? "opaque-sub")
     .setIssuedAt()
     .setExpirationTime(options.expiresIn ?? "5m")
     .sign((options.key ?? signingKey).privateKey)
@@ -101,9 +101,30 @@ describe("verifyIdToken", () => {
     expect((await verify(await sign(claims))).ok).toBe(false)
   })
 
-  it("rejects a nonce mismatch and a missing nonce", async () => {
+  it("rejects a nonce mismatch but accepts a token without one", async () => {
     expect((await verify(await sign({}), "different-nonce")).ok).toBe(false)
-    expect((await verify(await sign({ nonce: undefined }))).ok).toBe(false)
+    // Telegram's discovery doesn't list `nonce`; the code flow binds the token via state + PKCE.
+    expect((await verify(await sign({ nonce: undefined }))).ok).toBe(true)
+  })
+
+  it("takes the Telegram ID from a numeric sub when there is no id claim", async () => {
+    const result = await verify(await sign({ id: undefined, sub: "987654321" }))
+    expect(result.ok && result.data.telegramUserId).toBe("987654321")
+    const opaque = await verify(await sign({ id: undefined }))
+    expect(opaque.ok && opaque.data.telegramUserId).toBe(null)
+  })
+
+  it("drops a malformed profile claim instead of failing the login", async () => {
+    const result = await verify(await sign({ picture: "not a url", name: 42 }))
+    expect(result.ok && [result.data.pictureUrl, result.data.name]).toEqual([null, null])
+  })
+
+  it("logs the reason, algorithm and claim names but no claim values", async () => {
+    await verify(await sign({ phone_number: "+251911000000" }, { key: otherKey }))
+    const logged = JSON.stringify(vi.mocked(console.error).mock.calls)
+    expect(logged).toContain("alg RS256")
+    expect(logged).toContain("phone_number")
+    expect(logged).not.toContain("+251911000000")
   })
 
   it("rejects an expired token beyond the clock tolerance", async () => {

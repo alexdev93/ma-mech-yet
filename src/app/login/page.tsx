@@ -9,7 +9,7 @@ import { getCurrentUser } from "@/server/auth/session"
 import type { LoginError } from "@/server/services/auth-service"
 import { PageHeader } from "@/shared/components/page-header"
 
-export const metadata: Metadata = { title: "Sign in" }
+export const metadata: Metadata = { title: "Sign up or sign in" }
 
 const ERROR_MESSAGES: Record<LoginError, string> = {
   unavailable: "Telegram login is temporarily unavailable. Please try again later.",
@@ -23,7 +23,10 @@ const ERROR_MESSAGES: Record<LoginError, string> = {
 export default function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
     <>
-      <PageHeader title="Sign in" description="Use your Telegram account to sign in." />
+      <PageHeader
+        title="Sign up or sign in"
+        description="New here? Your account is created the first time you continue with Telegram."
+      />
       <Suspense
         fallback={<div aria-busy="true" className="bg-muted h-44 animate-pulse rounded-xl" />}
       >

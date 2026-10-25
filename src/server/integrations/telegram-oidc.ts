@@ -1,6 +1,8 @@
 import "server-only"
 import {
   createRemoteJWKSet,
+  decodeJwt,
+  decodeProtectedHeader,
   type JWTVerifyGetKey,
   type JWTVerifyOptions,
   errors as joseErrors,
@@ -44,13 +46,18 @@ const tokenResponseSchema = z.object({
 
 export type TokenResult = { idToken: string; grantedScopes: string[] | null }
 
+// Telegram's discovery lists sub, name, preferred_username, picture and phone_number, but no `id`.
+// Profile fields are best-effort: a malformed one is dropped instead of failing the login.
 const idTokenClaimsSchema = z.object({
-  sub: z.string().min(1),
-  id: z.union([z.number().int(), z.string().regex(/^\d+$/)]).optional(),
-  name: z.string().optional(),
-  preferred_username: z.string().optional(),
-  picture: z.url().optional(),
-  phone_number: z.string().min(1).optional(),
+  sub: z.union([z.string().min(1), z.number().int().transform(String)]),
+  id: z
+    .union([z.number().int(), z.string().regex(/^\d+$/)])
+    .optional()
+    .catch(undefined),
+  name: z.string().optional().catch(undefined),
+  preferred_username: z.string().optional().catch(undefined),
+  picture: z.url().optional().catch(undefined),
+  phone_number: z.string().min(1).optional().catch(undefined),
 })
 
 export type TelegramProfile = {
@@ -210,13 +217,16 @@ export async function verifyIdToken(
   }
   try {
     const { payload } = await jwtVerify(idToken, options.keys, verifyOptions)
-    if (typeof payload.nonce !== "string" || payload.nonce !== options.nonce) {
+    // A nonce that is present must match. Telegram's discovery doesn't list `nonce`, so an absent
+    // one is accepted: this token came straight from the token endpoint over TLS, in exchange for
+    // a single-use, browser-bound state and a PKCE verifier (OIDC requires nonce only for implicit).
+    if (payload.nonce !== undefined && payload.nonce !== options.nonce) {
       console.error("[telegram-oidc] ID token nonce mismatch")
       return { ok: false, error: "Telegram login failed." }
     }
     const claims = idTokenClaimsSchema.safeParse(payload)
     if (!claims.success) {
-      console.error("[telegram-oidc] Unexpected ID token claims", z.prettifyError(claims.error))
+      console.error(`[telegram-oidc] Invalid sub claim. Claims present: ${claimNames(payload)}`)
       return { ok: false, error: "Telegram login failed." }
     }
     const { sub, id, name, preferred_username, picture, phone_number } = claims.data
@@ -224,7 +234,8 @@ export async function verifyIdToken(
       ok: true,
       data: {
         sub,
-        telegramUserId: id === undefined ? null : String(id),
+        // `sub` is "public" (the same for every app), i.e. the Telegram user id, when numeric.
+        telegramUserId: id !== undefined ? String(id) : /^\d+$/.test(sub) ? sub : null,
         name: name ?? null,
         username: preferred_username ?? null,
         pictureUrl: picture ?? null,
@@ -232,11 +243,25 @@ export async function verifyIdToken(
       },
     }
   } catch (error) {
-    // jose error codes say what failed without including the token.
+    // jose error codes, the algorithm and claim names say what failed without exposing values.
     const code = error instanceof joseErrors.JOSEError ? error.code : "ERR_UNKNOWN"
-    console.error(`[telegram-oidc] ID token rejected (${code})`)
+    let alg = "unknown"
+    let names = "unreadable"
+    try {
+      alg = decodeProtectedHeader(idToken).alg ?? "none"
+      names = claimNames(decodeJwt(idToken))
+    } catch {}
+    const hint =
+      alg === "ES256K" ? " ES256K is unsupported: choose RS256, ES256 or EdDSA in @BotFather." : ""
+    console.error(
+      `[telegram-oidc] ID token rejected (${code}, alg ${alg}, claims ${names}).${hint}`,
+    )
     return { ok: false, error: "Telegram login failed." }
   }
+}
+
+function claimNames(payload: object): string {
+  return Object.keys(payload).sort().join(",")
 }
 
 function stripSlash(url: string): string {
