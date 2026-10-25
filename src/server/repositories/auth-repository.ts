@@ -58,6 +58,11 @@ export async function consumeLoginAttempt(stateHash: string): Promise<ConsumedLo
   return attempt ?? null
 }
 
+/** Records how a consumed attempt ended, for diagnosing failed logins from the database. */
+export async function recordLoginOutcome(stateHash: string, outcome: string): Promise<void> {
+  await getDb().update(loginAttempts).set({ outcome }).where(eq(loginAttempts.stateHash, stateHash))
+}
+
 /** Returns the user for a verified identity, creating both on first login. Safe to repeat. */
 export async function upsertTelegramIdentity(
   profile: TelegramProfile,

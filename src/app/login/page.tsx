@@ -4,7 +4,14 @@ import { redirect } from "next/navigation"
 import { Suspense } from "react"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { getCurrentUser } from "@/server/auth/session"
 import type { LoginError } from "@/server/services/auth-service"
 import { PageHeader } from "@/shared/components/page-header"
@@ -15,10 +22,22 @@ const ERROR_MESSAGES: Record<LoginError, string> = {
   unavailable: "Telegram login is temporarily unavailable. Please try again later.",
   denied: "You cancelled the Telegram login.",
   failed: "We couldn't verify your Telegram login. Please try again.",
-  expired: "Your login link expired or was already used. Please start again.",
+  expired:
+    "Your login link expired or was opened in a different browser. Please start again from this page.",
+  phone:
+    "Telegram didn't share your phone number. Try again and keep “Share phone number” switched on.",
+  bot: "You didn't allow our bot to message you. Try again and keep “Allow messages” switched on.",
   permissions:
-    "Signing in requires sharing your phone number and allowing our bot to message you. Please try again and allow both.",
+    "Telegram didn't share your phone number or allow our bot to message you. Try again and allow both.",
 }
+
+const STEPS = [
+  "Click Continue with Telegram below.",
+  "On Telegram's page, enter your phone number, or confirm if you're already logged in.",
+  "Approve the request in your Telegram app.",
+  "Keep “Share phone number” and “Allow messages” switched on, then accept.",
+  "You'll come back here to your profile automatically. Stay in this browser tab.",
+] as const
 
 export default function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
@@ -59,11 +78,18 @@ async function LoginCard({ searchParams }: Pick<PageProps<"/login">, "searchPara
           message you. All of these are required to sign in.
         </CardDescription>
         {message && (
-          <p role="alert" className="text-destructive flex items-center gap-2 pt-2 text-sm">
-            <AlertTriangle className="size-4 shrink-0" /> {message}
+          <p role="alert" className="text-destructive flex items-start gap-2 pt-2 text-sm">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" /> {message}
           </p>
         )}
       </CardHeader>
+      <CardContent>
+        <ol className="text-muted-foreground list-decimal space-y-1.5 pl-5 text-sm">
+          {STEPS.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+      </CardContent>
       <CardFooter>
         <Button asChild>
           {/* A plain link: the start route has side effects, so it must never be prefetched. */}
