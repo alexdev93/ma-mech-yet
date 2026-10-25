@@ -46,7 +46,8 @@ export async function loadEnvVault(): Promise<void> {
     }
     let loaded = 0
     for (const [key, value] of Object.entries(parsed.data)) {
-      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || process.env[key] !== undefined) continue
+      // An empty host variable counts as unset, so it can't mask the vault's value.
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || process.env[key]) continue
       process.env[key] = String(value)
       loaded++
     }
