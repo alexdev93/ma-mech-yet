@@ -49,3 +49,36 @@ export function getAuthEnv(): AuthEnv {
   authEnv = result.data
   return authEnv
 }
+
+// Bot-access events from the bot service (docs/contracts/telegram-otp.v1.md, section 9).
+// Optional: without a secret the endpoint answers 503 and logins work as before.
+const MIN_SECRET_LENGTH = 32
+
+const botEventsEnvSchema = z.object({
+  BOT_EVENTS_CLIENT_ID: text().default("telegram-bot"),
+  BOT_EVENTS_SECRET: z.string().trim().min(MIN_SECRET_LENGTH).optional(),
+  // Accepted alongside the current secret while a rotation is in progress
+  BOT_EVENTS_SECRET_PREVIOUS: z.string().trim().min(MIN_SECRET_LENGTH).optional(),
+})
+
+export type BotEventsConfig = { clientId: string; secrets: string[] }
+
+export function getBotEventsConfig(): BotEventsConfig | null {
+  // An empty value in the vault means "not set", not "too short"
+  const input = Object.fromEntries(
+    Object.keys(botEventsEnvSchema.shape).map((key) => [key, process.env[key] || undefined]),
+  )
+  const result = botEventsEnvSchema.safeParse(input)
+  if (!result.success) {
+    console.error(`[bot-events] Invalid configuration:\n${z.prettifyError(result.error)}`)
+    return null
+  }
+  const { BOT_EVENTS_CLIENT_ID, BOT_EVENTS_SECRET, BOT_EVENTS_SECRET_PREVIOUS } = result.data
+  if (!BOT_EVENTS_SECRET) return null
+  return {
+    clientId: BOT_EVENTS_CLIENT_ID,
+    secrets: [BOT_EVENTS_SECRET, BOT_EVENTS_SECRET_PREVIOUS].filter(
+      (secret) => secret !== undefined,
+    ),
+  }
+}
