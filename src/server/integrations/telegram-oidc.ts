@@ -33,10 +33,10 @@ export type OidcDiscovery = z.infer<typeof discoverySchema>
 
 export const BOT_ACCESS_SCOPE = "telegram:bot_access"
 /**
- * Always requested, on top of TELEGRAM_OIDC_SCOPES. `phone` adds the `phone_number` claim;
- * `telegram:bot_access` lets the bot message the user but adds no claim to the ID token.
+ * Always requested, on top of TELEGRAM_OIDC_SCOPES. The user may decline `phone` (adds the
+ * `phone_number` claim) and `telegram:bot_access` (lets the bot message them; adds no claim).
  */
-export const REQUIRED_SCOPES = ["openid", "profile", "phone", BOT_ACCESS_SCOPE] as const
+export const REQUESTED_SCOPES = ["openid", "profile", "phone", BOT_ACCESS_SCOPE] as const
 
 const tokenResponseSchema = z.object({
   id_token: z.string().min(1),
@@ -70,7 +70,7 @@ export type TelegramProfile = {
 }
 
 export function requestedScopes(config: AuthEnv): string {
-  return [...new Set([...REQUIRED_SCOPES, ...config.TELEGRAM_OIDC_SCOPES.split(/\s+/)])].join(" ")
+  return [...new Set([...REQUESTED_SCOPES, ...config.TELEGRAM_OIDC_SCOPES.split(/\s+/)])].join(" ")
 }
 
 type Discovered = { discovery: OidcDiscovery; keys: JWTVerifyGetKey; fetchedAt: number }

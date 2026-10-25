@@ -127,26 +127,33 @@ describe("completeLogin", () => {
   })
 
   it.each([
-    ["the phone number is withheld", { phoneNumber: null }, null, "phone", "missing:phone"],
-    ["bot messaging is declined", {}, ["openid", "profile", "phone"], "bot", "missing:bot_access"],
+    ["the phone number is withheld", { phoneNumber: null }, null, true, "success:declined:phone"],
+    [
+      "bot messaging is declined",
+      {},
+      ["openid", "profile", "phone"],
+      false,
+      "success:declined:bot_access",
+    ],
     [
       "both are withheld",
       { phoneNumber: null },
       ["openid", "profile"],
-      "permissions",
-      "missing:phone,bot_access",
+      false,
+      "success:declined:phone,bot_access",
     ],
   ])(
-    "refuses the login and stores nothing when %s",
-    async (_label, claims, grantedScopes, loginError, outcome) => {
-      vi.mocked(oidc.verifyIdToken).mockResolvedValue({ ok: true, data: { ...profile, ...claims } })
+    "still signs the user in when %s",
+    async (_label, claims, grantedScopes, botAccessGranted, outcome) => {
+      const withheld = { ...profile, ...claims }
+      vi.mocked(oidc.verifyIdToken).mockResolvedValue({ ok: true, data: withheld })
       vi.mocked(oidc.exchangeCode).mockResolvedValue({
         ok: true,
         data: { idToken: "id-token", grantedScopes },
       })
-      expect(await completeLogin(callback())).toEqual({ ok: false, error: loginError })
-      expect(repository.upsertTelegramIdentity).not.toHaveBeenCalled()
-      expect(repository.createSession).not.toHaveBeenCalled()
+      expect((await completeLogin(callback())).ok).toBe(true)
+      expect(repository.upsertTelegramIdentity).toHaveBeenCalledWith(withheld, botAccessGranted)
+      expect(repository.createSession).toHaveBeenCalled()
       expect(repository.recordLoginOutcome).toHaveBeenCalledWith(sha256("state-value"), outcome)
     },
   )

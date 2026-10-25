@@ -24,18 +24,13 @@ const ERROR_MESSAGES: Record<LoginError, string> = {
   failed: "We couldn't verify your Telegram login. Please try again.",
   expired:
     "Your login link expired or was opened in a different browser. Please start again from this page.",
-  phone:
-    "Telegram didn't share your phone number. Try again and keep “Share phone number” switched on.",
-  bot: "You didn't allow our bot to message you. Try again and keep “Allow messages” switched on.",
-  permissions:
-    "Telegram didn't share your phone number or allow our bot to message you. Try again and allow both.",
 }
 
 const STEPS = [
   "Click Continue with Telegram below.",
   "On Telegram's page, enter your phone number, or confirm if you're already logged in.",
   "Approve the request in your Telegram app.",
-  "Keep “Share phone number” and “Allow messages” switched on, then accept.",
+  "Choose whether to share your phone number and allow bot messages (both optional), then accept.",
   "You'll come back here to your profile automatically. Stay in this browser tab.",
 ] as const
 
@@ -73,9 +68,9 @@ async function LoginCard({ searchParams }: Pick<PageProps<"/login">, "searchPara
       <CardHeader>
         <CardTitle>Continue with Telegram</CardTitle>
         <CardDescription>
-          You'll confirm the login in Telegram and come back here. Telegram will ask you to share
-          your name, username, profile photo, Telegram ID and phone number, and to let our bot
-          message you. All of these are required to sign in.
+          You'll confirm the login in Telegram and come back here. We receive your name, username,
+          profile photo and Telegram ID. Sharing your phone number and letting our bot message you
+          are optional.
         </CardDescription>
         {message && (
           <p role="alert" className="text-destructive flex items-start gap-2 pt-2 text-sm">
