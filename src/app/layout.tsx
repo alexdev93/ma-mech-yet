@@ -31,6 +31,9 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
                     {link.label}
                   </Link>
                 ))}
+                <Link href="/account" className="hover:text-foreground">
+                  Account
+                </Link>
                 <ThemeToggle />
               </div>
             </nav>

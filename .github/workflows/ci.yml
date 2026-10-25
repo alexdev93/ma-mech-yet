@@ -18,6 +18,9 @@ jobs:
     timeout-minutes: 15
     env:
       NEXT_TELEMETRY_DISABLED: 1
+      # Repository secret. Pull requests from forks don't receive it and run without the vault.
+      ENV_VAULT_TOKEN: ${{ secrets.ENV_VAULT_TOKEN }}
+      ENV_VAULT_CLIENT: github-ci
     steps:
       - uses: actions/checkout@v4
 
@@ -30,4 +33,17 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm verify
+      - name: Install envvault
+        if: env.ENV_VAULT_TOKEN != ''
+        run: |
+          curl -fsS https://env-vault-api.alexdev93.workers.dev/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # The vault's "main" branch: PR refs like "123/merge" don't exist in the vault.
+      - name: Verify
+        run: |
+          if [ -n "$ENV_VAULT_TOKEN" ]; then
+            envvault run ma-mech-yet -b main -- pnpm verify
+          else
+            pnpm verify
+          fi
