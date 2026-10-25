@@ -119,14 +119,14 @@ describe("completeLogin", () => {
       audience: "1234567",
       issuer: discovery.issuer,
     })
-    // No scope list in the token response means everything requested was granted.
-    expect(repository.upsertTelegramIdentity).toHaveBeenCalledWith(profile, true)
+    // No scope list: bot access stays unconfirmed (Telegram's list isn't reliable for it).
+    expect(repository.upsertTelegramIdentity).toHaveBeenCalledWith(profile, false)
     const session = vi.mocked(repository.createSession).mock.calls[0]?.[0]
     expect(session).toMatchObject({ userId: "user-1", tokenHash: sha256(result.data.sessionToken) })
     expect(result.data.returnTo).toBe("/account")
   })
 
-  it("accepts a granted-scope list that includes bot access", async () => {
+  it("confirms bot access only when Telegram explicitly lists it", async () => {
     vi.mocked(oidc.exchangeCode).mockResolvedValue({
       ok: true,
       data: {
@@ -139,20 +139,27 @@ describe("completeLogin", () => {
   })
 
   it.each([
-    ["the phone number is withheld", { phoneNumber: null }, null, true, "success:declined:phone"],
     [
-      "bot messaging is declined",
+      "the phone number is withheld",
+      { phoneNumber: null },
+      null,
+      false,
+      "success;scopes=unlisted;phone=no",
+    ],
+    [
+      // The real Telegram case: access granted, yet missing from `scope`. Stays unconfirmed.
+      "bot access isn't listed in the granted scopes",
       {},
       ["openid", "profile", "phone"],
       false,
-      "success:declined:bot_access",
+      "success;scopes=openid,profile,phone;phone=yes",
     ],
     [
-      "both are withheld",
+      "both are missing",
       { phoneNumber: null },
       ["openid", "profile"],
       false,
-      "success:declined:phone,bot_access",
+      "success;scopes=openid,profile;phone=no",
     ],
   ])(
     "still signs the user in when %s",
@@ -173,7 +180,10 @@ describe("completeLogin", () => {
   it("records success, and a recording failure doesn't break the login", async () => {
     vi.mocked(repository.recordLoginOutcome).mockRejectedValueOnce(new Error("db down"))
     expect((await completeLogin(callback())).ok).toBe(true)
-    expect(repository.recordLoginOutcome).toHaveBeenCalledWith(sha256("state-value"), "success")
+    expect(repository.recordLoginOutcome).toHaveBeenCalledWith(
+      sha256("state-value"),
+      "success;scopes=unlisted;phone=yes",
+    )
   })
 
   it("records why a token step failed", async () => {

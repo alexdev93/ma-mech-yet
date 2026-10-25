@@ -22,7 +22,12 @@ export const telegramIdentities = pgTable("telegram_identities", {
   pictureUrl: text("picture_url"),
   /** Verified by Telegram (`phone` scope). Personal data: never logged. */
   phoneNumber: text("phone_number"),
-  botAccessGranted: boolean("bot_access_granted").notNull().default(false),
+  /**
+   * true once confirmed, null while unknown. Telegram's token response doesn't list
+   * telegram:bot_access even when granted, so login alone can't confirm it; the bot can
+   * (its chat receives a write_access_allowed service message).
+   */
+  botAccessGranted: boolean("bot_access_granted"),
   botAccessGrantedAt: timestamp("bot_access_granted_at", { withTimezone: true }),
   linkedAt: timestamp("linked_at", { withTimezone: true }).notNull().defaultNow(),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }).notNull().defaultNow(),
