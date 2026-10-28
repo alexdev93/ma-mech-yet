@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { after, type NextRequest, NextResponse } from "next/server"
 
 import {
   clearedCookieOptions,
@@ -6,7 +6,7 @@ import {
   SESSION_COOKIE,
   sessionCookieOptions,
 } from "@/server/auth/session"
-import { completeLogin } from "@/server/services/auth-service"
+import { completeLogin, sendLoginNotification } from "@/server/services/auth-service"
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const query = request.nextUrl.searchParams
@@ -26,6 +26,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   response.headers.set("Cache-Control", "no-store")
   response.cookies.set(LOGIN_STATE_COOKIE, "", clearedCookieOptions)
   if (result.ok) {
+    const { telegramUserId } = result.data
+    // After the redirect is sent, so a slow or unreachable Bot API never delays the sign-in.
+    if (telegramUserId) {
+      after(() =>
+        sendLoginNotification(telegramUserId).catch((error: unknown) =>
+          console.error("[auth] Login notification failed", error),
+        ),
+      )
+    }
     response.cookies.set(
       SESSION_COOKIE,
       result.data.sessionToken,

@@ -2,6 +2,7 @@ import "server-only"
 
 import { pkceChallenge, randomToken, safeEqual, sha256 } from "@/server/auth/crypto"
 import { getAuthEnv } from "@/server/config/env"
+import { sendMessage } from "@/server/integrations/telegram-bot"
 import {
   BOT_ACCESS_SCOPE,
   buildAuthorizationUrl,
@@ -82,9 +83,17 @@ export type CallbackParams = {
   previousSessionToken?: string | null
 }
 
+export type CompletedLogin = {
+  sessionToken: string
+  expiresAt: Date
+  returnTo: string
+  /** Null when Telegram didn't send a numeric user id; the bot can't message the user then. */
+  telegramUserId: string | null
+}
+
 export async function completeLogin(
   params: CallbackParams,
-): Promise<Result<{ sessionToken: string; expiresAt: Date; returnTo: string }, LoginError>> {
+): Promise<Result<CompletedLogin, LoginError>> {
   const { code, state, error, stateCookie } = params
   // The state must come back to the same browser that started the flow (login CSRF protection).
   if (!state || !stateCookie || !safeEqual(state, stateCookie)) {
@@ -116,7 +125,7 @@ export async function completeLogin(
   return result
 }
 
-type LoginResult = Result<{ sessionToken: string; expiresAt: Date; returnTo: string }, LoginError>
+type LoginResult = Result<CompletedLogin, LoginError>
 
 async function finishLogin(
   attempt: ConsumedLoginAttempt,
@@ -165,9 +174,36 @@ async function finishLogin(
   // Scope names and a phone yes/no are not personal data, and show what Telegram actually sent.
   const scopes = grantedScopes === null ? "unlisted" : grantedScopes.join(",")
   return {
-    result: { ok: true, data: { sessionToken, expiresAt, returnTo: attempt.returnTo } },
+    result: {
+      ok: true,
+      data: {
+        sessionToken,
+        expiresAt,
+        returnTo: attempt.returnTo,
+        telegramUserId: profile.data.telegramUserId,
+      },
+    },
     outcome: `success;scopes=${scopes};phone=${profile.data.phoneNumber === null ? "no" : "yes"}`,
   }
+}
+
+/**
+ * Tells the user through the bot that they just signed in, so a sign-in they didn't make stands
+ * out. Best effort: it runs after the login response, and needs TELEGRAM_BOT_TOKEN and the user's
+ * permission for the bot to message them. Without that permission Telegram refuses, which is fine.
+ */
+export async function sendLoginNotification(telegramUserId: string): Promise<void> {
+  const config = getAuthEnv()
+  if (!config.TELEGRAM_BOT_TOKEN) return
+  const site = new URL(config.TELEGRAM_OIDC_REDIRECT_URI)
+  const accountUrl = new URL(DEFAULT_RETURN_TO, site.origin)
+  const text = [
+    `You just signed in to ${site.host} with Telegram.`,
+    `Not you? Sign out on every device here: ${accountUrl}`,
+  ].join("\n\n")
+  const sent = await sendMessage(config.TELEGRAM_BOT_TOKEN, telegramUserId, text)
+  if (sent.ok) console.info("[auth] Login notification sent")
+  else if (sent.error === "forbidden") console.info("[auth] Login notification not allowed by user")
 }
 
 export async function getSessionUser(sessionToken: string): Promise<SessionUser | null> {

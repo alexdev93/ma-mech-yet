@@ -34,6 +34,14 @@ const authEnvSchema = z.object({
     .transform((value) => value.replace(/^@/, ""))
     .pipe(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{4,31}$/))
     .optional(),
+  /** Optional. Lets the bot message users after they sign in. An empty value means "not set". */
+  TELEGRAM_BOT_TOKEN: z.preprocess(
+    (value) => (typeof value === "string" ? value.trim() || undefined : value),
+    z
+      .string()
+      .regex(/^\d+:[A-Za-z0-9_-]{30,}$/, "must look like 123456:ABC-DEF… from @BotFather")
+      .optional(),
+  ),
 })
 
 export type AuthEnv = z.infer<typeof authEnvSchema>
