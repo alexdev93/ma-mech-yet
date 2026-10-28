@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { pkceChallenge, sha256 } from "@/server/auth/crypto"
+import * as bot from "@/server/integrations/telegram-bot"
 import * as oidc from "@/server/integrations/telegram-oidc"
 import * as repository from "@/server/repositories/auth-repository"
 import {
@@ -10,11 +11,14 @@ import {
   LOGIN_RATE_LIMIT,
   logoutEverywhere,
   safeReturnTo,
+  sendLoginNotification,
   startLogin,
 } from "./auth-service"
 
+const botToken = vi.hoisted(() => ({ value: undefined as string | undefined }))
 vi.mock("@/server/config/env", () => ({
   getAuthEnv: () => ({
+    TELEGRAM_BOT_TOKEN: botToken.value,
     DATABASE_URL: "postgresql://localhost/test",
     TELEGRAM_OIDC_ISSUER: "https://oauth.example.test",
     TELEGRAM_OIDC_CLIENT_ID: "1234567",
@@ -36,6 +40,7 @@ vi.mock("@/server/repositories/auth-repository", () => ({
   deleteUserSessions: vi.fn(),
   deleteUser: vi.fn(),
 }))
+vi.mock("@/server/integrations/telegram-bot", () => ({ sendMessage: vi.fn() }))
 vi.mock("@/server/integrations/telegram-oidc", async (importOriginal) => ({
   ...(await importOriginal<typeof oidc>()),
   getDiscovery: vi.fn(),
@@ -124,6 +129,7 @@ describe("completeLogin", () => {
     const session = vi.mocked(repository.createSession).mock.calls[0]?.[0]
     expect(session).toMatchObject({ userId: "user-1", tokenHash: sha256(result.data.sessionToken) })
     expect(result.data.returnTo).toBe("/account")
+    expect(result.data.telegramUserId).toBe("987654321")
   })
 
   it("confirms bot access only when Telegram explicitly lists it", async () => {
@@ -256,6 +262,28 @@ describe("rate limiting", () => {
     expect(await startLogin(null, "203.0.113.7")).toEqual({ ok: false, error: "rate_limited" })
     expect(repository.createLoginAttempt).not.toHaveBeenCalled()
     expect(oidc.getDiscovery).not.toHaveBeenCalled()
+  })
+})
+
+describe("sendLoginNotification", () => {
+  it("messages the user through the bot when a bot token is configured", async () => {
+    botToken.value = "123456:token"
+    vi.mocked(bot.sendMessage).mockResolvedValue({ ok: true, data: true })
+    vi.spyOn(console, "info").mockImplementation(() => {})
+
+    await sendLoginNotification("987654321")
+
+    const [token, chatId, text] = vi.mocked(bot.sendMessage).mock.calls[0] ?? []
+    expect(token).toBe("123456:token")
+    expect(chatId).toBe("987654321")
+    expect(text).toContain("app.example.test")
+    expect(text).toContain("https://app.example.test/account")
+    botToken.value = undefined
+  })
+
+  it("does nothing without a bot token", async () => {
+    await sendLoginNotification("987654321")
+    expect(bot.sendMessage).not.toHaveBeenCalled()
   })
 })
 
